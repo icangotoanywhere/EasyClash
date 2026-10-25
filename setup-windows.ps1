@@ -129,7 +129,8 @@ if (-not $SkipCore) {
     Push-Location (Join-Path $Root "core")
     try {
         Run "go" @("get", "github.com/metacubex/mihomo@$MihomoVersion") "拉取 mihomo 源码"
-        Run "go" @("get", "golang.org/x/mobile/bind@latest") "拉取 gomobile bind"
+        # 新版 gomobile 要求 x/mobile 在模块依赖里；登记成 tool 依赖，go mod tidy 才不会把它删掉
+        Run "go" @("get", "-tool", "golang.org/x/mobile/cmd/gobind@latest") "拉取 gomobile bind"
         Run "go" @("mod", "tidy") "整理 Go 依赖"
         New-Item -ItemType Directory -Force -Path (Join-Path $Root "app\libs") | Out-Null
         # -tags cmfa：mihomo 为非 root 安卓客户端准备的编译开关（不读系统包列表、由 App 传入 TUN fd）；with_gvisor：内置 gVisor 网络栈

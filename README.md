@@ -62,7 +62,7 @@ Fork 后在 Actions 里手动运行 **Build APK**，产物在 Artifacts。
 
 - 内核必须带 `-tags with_gvisor,cmfa` 编译：`cmfa` 是 mihomo 为非 root 安卓客户端准备的开关，没有它 TUN 启动必失败（表现为"已连接但所有流量为 0"）。
 - 中文 Windows：脚本需 UTF-8 BOM；javac 需 `-encoding UTF-8`；下载用系统 `curl.exe`。
-- gomobile 最新版要求 Go ≥ 1.26。
+- gomobile 最新版要求 Go ≥ 1.26，并要求 `golang.org/x/mobile` 在模块依赖里：用 `go get -tool golang.org/x/mobile/cmd/gobind@latest` 登记，否则 `go mod tidy` 会把它删掉、`gomobile bind` 报 missing golang.org/x/mobile。
 
 ## 许可
 

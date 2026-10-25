@@ -45,7 +45,8 @@ jobs:
             gomobile init
             cd core
             go get github.com/metacubex/mihomo@${MIHOMO_VERSION}
-            go get golang.org/x/mobile/bind@latest
+            # 新版 gomobile 要求 x/mobile 在模块依赖里；登记成 tool 依赖，go mod tidy 才不会把它删掉
+            go get -tool golang.org/x/mobile/cmd/gobind@latest
             go mod tidy
             mkdir -p ../app/libs
             gomobile bind -target android/arm64 -androidapi 26 -tags with_gvisor,cmfa -ldflags "-s -w" -trimpath -o ../app/libs/core.aar .
