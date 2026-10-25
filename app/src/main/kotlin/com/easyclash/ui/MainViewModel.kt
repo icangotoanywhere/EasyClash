@@ -140,9 +140,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val after = _proxies.value[region.groupName]?.now
         say(
             when {
-                after == null -> "${region.flag} ${region.name} 测速完成"
-                before != null && before != after -> "${region.flag} ${region.name}：已从「$before」切换到「$after」"
-                else -> "${region.flag} ${region.name}：仍是最快节点「$after」"
+                after == null -> "${region.flag} ${region.displayName} 测速完成"
+                before != null && before != after -> "${region.flag} ${region.displayName}：已从「$before」切换到「$after」"
+                else -> "${region.flag} ${region.displayName}：仍是最快节点「$after」"
             }
         )
     }
@@ -164,7 +164,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (first != null) runCatching { api.select(mainGroup, first) }
         } else {
             val region = Regions.of(code) ?: return@launch
-            if (regionGroups.none { it.code == code }) { say("当前订阅里没有${region.name}的节点"); return@launch }
+            if (regionGroups.none { it.code == code }) { say("当前订阅里没有${region.displayName}的节点"); return@launch }
             runCatching {
                 api.select(ConfigBuilder.REGION_SELECTOR, region.groupName)
                 api.select(mainGroup, ConfigBuilder.REGION_SELECTOR)

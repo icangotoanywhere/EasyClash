@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.easyclash.core.Regions
 import com.easyclash.data.ProxyItem
 import com.easyclash.ui.MainViewModel
 import com.easyclash.ui.components.HelpText
@@ -137,8 +138,8 @@ private fun GroupNode(
             )
         }
         Column(Modifier.weight(1f).clickable { expanded = !expanded }) {
-            Text((if (isMain) "★ " else "") + g.name, style = if (depth == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
-            HelpText("${typeLabel(g.type)} · 当前：${g.now ?: "—"}" + (if (g.now != null && proxies[g.now]?.isGroup == true) " → ${resolveLeaf(proxies, g.name)}" else ""))
+            Text((if (isMain) "★ " else "") + Regions.displayName(g.name), style = if (depth == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
+            HelpText("${typeLabel(g.type)} · 当前：${g.now?.let { Regions.displayName(it) } ?: "—"}" + (if (g.now != null && proxies[g.now]?.isGroup == true) " → ${resolveLeaf(proxies, g.name)}" else ""))
         }
         if (depth < 2 || g.isSelectable) TextButton(onClick = { vm.testGroup(g.name) }, enabled = !busy) { Text("测速") }
         IconButton(onClick = { expanded = !expanded }) {
@@ -164,7 +165,7 @@ private fun GroupNode(
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = g.now == name, onClick = if (g.isSelectable) ({ vm.selectProxy(g.name, name) }) else null, enabled = g.isSelectable)
-                    Text(name, style = MaterialTheme.typography.bodyMedium)
+                    Text(Regions.displayName(name), style = MaterialTheme.typography.bodyMedium)
                 }
                 DelayText(p)
             }

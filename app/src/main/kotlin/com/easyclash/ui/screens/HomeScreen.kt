@@ -141,7 +141,7 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                             FilterChip(
                                 selected = settings.lockedRegion == r.code,
                                 onClick = { vm.lockRegion(r.code) },
-                                label = { Text(if (delay > 0) "${r.flag} ${r.name} ${delay}ms" else "${r.flag} ${r.name}") },
+                                label = { Text(if (delay > 0) "${r.flag} ${r.displayName} ${delay}ms" else "${r.flag} ${r.displayName}") },
                             )
                         }
                     }
@@ -150,7 +150,7 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (locked != null) {
                             Button(onClick = { vm.testRegion(locked.code) }, enabled = !busy) {
-                                Text(if (busy) "测速中…" else "测速 ${locked.flag} ${locked.name}")
+                                Text(if (busy) "测速中…" else "测速 ${locked.flag} ${locked.displayName}")
                             }
                         }
                         OutlinedButton(onClick = { regions.forEach { vm.testGroup(it.groupName) } }, enabled = !busy) {
@@ -158,13 +158,13 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                         }
                     }
                     HelpText(
-                        if (locked != null) "「测速 ${locked.name}」：只重测该地区的节点，并立刻换到其中最快的（当前节点卡了、不想等 5 分钟自动测速时点它）。「测速全部地区」会把所有地区都测一遍，用时较长。"
+                        if (locked != null) "「测速 ${locked.displayName}」：只重测该地区的节点，并立刻换到其中最快的（当前节点卡了、不想等 5 分钟自动测速时点它）。「测速全部地区」会把所有地区都测一遍，用时较长。"
                         else "选中一个地区后，这里会多出一个只测该地区的按钮。「测速全部地区」会把所有地区都测一遍，各地区各自切到最快节点。",
                         Modifier.padding(top = 4.dp),
                     )
                     if (locked != null) {
                         Spacer(Modifier.height(4.dp))
-                        KeyValueRow("锁定地区", "${locked.flag} ${locked.name}")
+                        KeyValueRow("锁定地区", "${locked.flag} ${locked.displayName}")
                         KeyValueRow("实际节点", resolveLeaf(proxies, locked.groupName))
                         HelpText("每 5 分钟自动测速一次并切到最快节点；手动测速立即生效。")
                     }

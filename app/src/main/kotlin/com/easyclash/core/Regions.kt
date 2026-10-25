@@ -13,9 +13,17 @@ data class Region(
     /** 同样的匹配逻辑，但写成 Go 正则（RE2 不支持环视），给内核策略组的 filter 字段用 */
     val goPattern: String,
 ) {
-    /** 内核里自动测速组的名字，例如 "🇸🇬 新加坡·自动" */
+    /** 内核里自动测速组的名字，例如 "🇸🇬 新加坡·自动"（内核侧保持不变） */
     val groupName: String get() = "$flag $name·自动"
+
+    /** 界面上显示的地区名：港澳台显示为「中国香港」「中国澳门」「中国台湾」。name 仍用于识别节点名和内核组名 */
+    val displayName: String get() = if (code in CHINA_SAR) "中国$name" else name
+
+    /** 界面上显示的测速组名，例如 "🇭🇰 中国香港·自动" */
+    val displayGroupName: String get() = "$flag $displayName·自动"
 }
+
+private val CHINA_SAR = setOf("HK", "MO", "TW")
 
 object Regions {
     private fun goEscape(s: String) = s.replace(Regex("[.*+?^\${}()|\\[\\]\\\\]")) { "\\" + it.value }
@@ -65,6 +73,9 @@ object Regions {
     val infoNodeRegex = Regex("剩余|到期|流量|官网|过期|套餐|重置|expire|traffic|群|公告", RegexOption.IGNORE_CASE)
 
     fun of(code: String?): Region? = all.firstOrNull { it.code == code }
+
+    /** 把内核里的策略组名换成界面显示用的名字（地区自动组用显示名，其余原样返回） */
+    fun displayName(kernelName: String): String = all.firstOrNull { it.groupName == kernelName }?.displayGroupName ?: kernelName
 
     /** 判断一个节点属于哪个地区。先按国旗/中文名精确匹配，再用正则。 */
     fun match(nodeName: String): Region? {

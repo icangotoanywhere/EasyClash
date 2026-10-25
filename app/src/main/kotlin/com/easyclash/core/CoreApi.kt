@@ -116,7 +116,7 @@ class CoreApi(private val port: Int, private val secret: String) {
                 host = m.optString("host").ifBlank { m.optString("destinationIP") },
                 destination = "${m.optString("destinationIP")}:${m.optString("destinationPort")}",
                 network = m.optString("network").uppercase(),
-                chain = chains.reversed().joinToString(" → "),
+                chain = chains.reversed().joinToString(" → ") { Regions.displayName(it) },
                 rule = listOf(c.optString("rule"), c.optString("rulePayload")).filter { it.isNotBlank() }.joinToString(" "),
                 upload = c.optLong("upload"),
                 download = c.optLong("download"),
