@@ -221,7 +221,7 @@ class EasyClashVpnService : VpnService() {
                         .onSuccess { VpnState.appendLog("[APP] 分级选择 " + it.describe(region, settings.backupPenaltyMs)) }
                         .onFailure { VpnState.appendLog("[APP] 分级选择失败：${it.message}") }
                 }
-                delay(ConfigBuilder.URL_TEST_INTERVAL * 1000L)
+                delay(ConfigBuilder.testIntervalSec(settings) * 1000L)
             }
         }
     }

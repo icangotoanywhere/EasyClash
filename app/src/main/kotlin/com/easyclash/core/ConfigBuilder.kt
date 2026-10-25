@@ -45,8 +45,8 @@ object ConfigBuilder {
         val tieredRegions: Set<String>,   // 其中哪些地区分了"优先/备用"两级（地区代码）
     )
 
-    /** 自动测速组的健康检查间隔（秒）。手机上保持 5 分钟，兼顾耗电 */
-    const val URL_TEST_INTERVAL = 300
+    /** 自动测速组的健康检查间隔（秒）：高级页"自动测速间隔"，默认 5 分钟，兼顾耗电 */
+    fun testIntervalSec(settings: Settings) = settings.testIntervalMin.coerceIn(1, 1440) * 60
 
     private fun yaml(): Yaml {
         val lo = LoaderOptions().apply {
@@ -114,6 +114,7 @@ object ConfigBuilder {
         val tiered = mutableSetOf<String>()
         val tierSelectors = mutableSetOf<String>()
         val keyword = settings.backupKeyword.trim()
+        val interval = testIntervalSec(settings)
         for (region in Regions.all) {
             if (region.groupName in existingGroupNames) { createdRegions += region; continue }
             val matched = nodeNames.filter { Regions.match(it) == region }
@@ -125,13 +126,13 @@ object ConfigBuilder {
             val useTiers = keyword.isNotEmpty() && backup.isNotEmpty() && (primary.isNotEmpty() || providerNames.isNotEmpty())
 
             if (!useTiers) {
-                groups += urlTestGroup(region.groupName, matched, providerNames, region.goPattern, Regions.infoNodeRegex.pattern)
+                groups += urlTestGroup(region.groupName, matched, providerNames, region.goPattern, Regions.infoNodeRegex.pattern, interval)
             } else {
                 val kw = goEscape(keyword)
                 val rp = region.goPattern.removePrefix("(?i)")
                 // 优先组：该地区所有不含关键字的节点；备用组：该地区含关键字的节点
-                groups += urlTestGroup(region.primaryGroup, primary, providerNames, region.goPattern, "(?i)${Regions.infoNodeRegex.pattern}|$kw")
-                groups += urlTestGroup(region.backupGroup, backup, providerNames, "(?i)(?:$rp).*(?:$kw)|(?:$kw).*(?:$rp)", Regions.infoNodeRegex.pattern)
+                groups += urlTestGroup(region.primaryGroup, primary, providerNames, region.goPattern, "(?i)${Regions.infoNodeRegex.pattern}|$kw", interval)
+                groups += urlTestGroup(region.backupGroup, backup, providerNames, "(?i)(?:$rp).*(?:$kw)|(?:$kw).*(?:$rp)", Regions.infoNodeRegex.pattern, interval)
                 // 自动组本身变成一个选择组，由 App 里的 TierPicker 按"优先比备用慢多少"决定选哪一级
                 val sel = LinkedHashMap<String, Any?>()
                 sel["name"] = region.groupName
@@ -293,12 +294,12 @@ object ConfigBuilder {
     private fun goEscape(s: String) = s.replace(Regex("[.*+?^\${}()|\\[\\]\\\\]")) { "\\" + it.value }
 
     /** 一个按延迟自动选择的组。lazy：只有被用到时才定期测速，省流量省电 */
-    private fun urlTestGroup(name: String, nodes: List<String>, providers: List<String>, filter: String, exclude: String): LinkedHashMap<String, Any?> {
+    private fun urlTestGroup(name: String, nodes: List<String>, providers: List<String>, filter: String, exclude: String, interval: Int): LinkedHashMap<String, Any?> {
         val g = LinkedHashMap<String, Any?>()
         g["name"] = name
         g["type"] = "url-test"
         g["url"] = "https://www.gstatic.com/generate_204"
-        g["interval"] = URL_TEST_INTERVAL
+        g["interval"] = interval
         g["tolerance"] = 50
         g["lazy"] = true
         if (nodes.isNotEmpty()) g["proxies"] = nodes

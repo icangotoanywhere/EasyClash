@@ -159,7 +159,7 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                         }
                     }
                     HelpText(
-                        if (locked != null) "「测速 ${locked.displayName}」：只重测该地区的节点，并立刻换到其中最快的（当前节点卡了、不想等 5 分钟自动测速时点它）。「测速全部地区」会把所有地区都测一遍，用时较长。"
+                        if (locked != null) "「测速 ${locked.displayName}」：只重测该地区的节点，并立刻换到其中最快的（当前节点卡了、不想等自动测速时点它）。「测速全部地区」会把所有地区都测一遍，用时较长。"
                         else "选中一个地区后，这里会多出一个只测该地区的按钮。「测速全部地区」会把所有地区都测一遍，各地区各自切到最快节点。",
                         Modifier.padding(top = 4.dp),
                     )
@@ -172,8 +172,8 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                         }
                         KeyValueRow("实际节点", resolveLeaf(proxies, locked.groupName))
                         HelpText(
-                            if (vm.isTiered(locked.code)) "每 5 分钟把优先、备用两级都测一次：优先里最快的比备用慢超过 ${settings.backupPenaltyMs}ms 才用备用（高级页可改）。手动测速立即生效。"
-                            else "每 5 分钟自动测速一次并切到最快节点；手动测速立即生效。"
+                            if (vm.isTiered(locked.code)) "每 ${settings.testIntervalMin} 分钟把优先、备用两级都测一次：优先里最快的比备用慢超过 ${settings.backupPenaltyMs}ms 才用备用（高级页可改）。手动测速立即生效。"
+                            else "每 ${settings.testIntervalMin} 分钟自动测速一次并切到最快节点（高级页可改）；手动测速立即生效。"
                         )
                     }
                 }

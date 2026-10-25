@@ -78,7 +78,18 @@ object Regions {
     fun of(code: String?): Region? = all.firstOrNull { it.code == code }
 
     /** 把内核里的策略组名换成界面显示用的名字（地区自动组用显示名，其余原样返回） */
-    fun displayName(kernelName: String): String = all.firstOrNull { it.groupName == kernelName }?.displayGroupName ?: kernelName
+    fun displayName(kernelName: String): String {
+        for (r in all) {
+            if (kernelName == r.groupName) return r.displayGroupName
+            if (kernelName == r.primaryGroup) return "${r.flag} ${r.displayName}·优先"
+            if (kernelName == r.backupGroup) return "${r.flag} ${r.displayName}·备用"
+        }
+        return kernelName
+    }
+
+    /** 是不是本软件生成的地区相关策略组（🌍 地区选择、各地区的 ·自动 / ·优先 / ·备用） */
+    fun isRegionGroup(name: String): Boolean =
+        name == ConfigBuilder.REGION_SELECTOR || all.any { name == it.groupName || name == it.primaryGroup || name == it.backupGroup }
 
     /** 判断一个节点属于哪个地区。先按国旗/中文名精确匹配，再用正则。 */
     fun match(nodeName: String): Region? {

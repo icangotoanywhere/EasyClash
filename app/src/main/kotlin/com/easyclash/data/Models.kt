@@ -80,6 +80,8 @@ data class Settings(
     var backupKeyword: String = "中转",
     /** 优先节点比备用节点慢超过这么多毫秒，才改用备用节点 */
     var backupPenaltyMs: Int = 100,
+    /** 自动测速 / 自动选节点的周期（分钟） */
+    var testIntervalMin: Int = 5,
     var geoAutoUpdate: Boolean = true,           // 连接后自动检查地理数据库（每 7 天一次）
     var geoLastCheck: Long = 0L,                 // 上次成功检查 / 更新数据库的时间（毫秒）
     var geoLastAttempt: Long = 0L,               // 上次尝试时间，失败后 12 小时内不再自动重试
@@ -91,7 +93,7 @@ data class Settings(
         put("mode", mode.name); put("appProxyMode", appProxyMode.name)
         put("appList", JSONArray(appList.toList()))
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
-        put("backupKeyword", backupKeyword); put("backupPenaltyMs", backupPenaltyMs)
+        put("backupKeyword", backupKeyword); put("backupPenaltyMs", backupPenaltyMs); put("testIntervalMin", testIntervalMin)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect)
         put("useSubscriptionDns", useSubscriptionDns)
         put("tunStack", tunStack.name); put("logLevel", logLevel)
@@ -114,6 +116,7 @@ data class Settings(
             s.ipv6 = o.optBoolean("ipv6", false)
             s.backupKeyword = o.optString("backupKeyword", "中转")
             s.backupPenaltyMs = o.optInt("backupPenaltyMs", 100)
+            s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)
             s.blockQuic = o.optBoolean("blockQuic", true)
             s.bingDirect = o.optBoolean("bingDirect", true)
             s.useSubscriptionDns = o.optBoolean("useSubscriptionDns", false)

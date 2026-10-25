@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -72,7 +73,7 @@ fun ProxiesScreen(vm: MainViewModel) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("策略组", style = MaterialTheme.typography.titleMedium)
-                    HelpText("★ 是主组，决定代理流量最终从哪出去。缩进的是它包含的子组，点 ▸ 展开。")
+                    HelpText("★ 是主组，决定代理流量最终从哪出去。缩进的是它包含的子组，点 ▸ 展开。淡色块里是按地区出口的策略组，和订阅自己的节点分开列。")
                 }
                 InfoButton(
                     "节点页说明",
@@ -154,7 +155,25 @@ private fun GroupNode(
     if (!expanded) return
     if (!g.isSelectable) HelpText("此组由内核自动选择，不能手动指定。", Modifier.padding(start = indent + 12.dp, bottom = 4.dp))
     if (depth >= 4) { HelpText("层级太深，不再展开", Modifier.padding(start = indent + 12.dp)); return }
+
+    // ---- 地区出口块：本软件生成的地区策略组紧跟在组标题下面、缩进并换底色，和订阅自己的节点/子组分开 ----
+    val regionChildren = if (Regions.isRegionGroup(g.name)) emptyList() else g.all.filter { Regions.isRegionGroup(it) && proxies[it]?.isGroup == true }
+    if (regionChildren.isNotEmpty()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(start = indent + 12.dp, top = 2.dp, bottom = 6.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+        ) {
+            Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+                HelpText("按地区出口（本软件生成，首页「代理出口地区」改的就是这里）", Modifier.padding(start = 8.dp, bottom = 2.dp))
+                regionChildren.forEach { name ->
+                    GroupNode(proxies.getValue(name), proxies, depth + 1, isMain = false, initiallyExpanded = false, busy = busy, vm = vm, parent = g)
+                }
+            }
+        }
+    }
     g.all.forEach { name ->
+        if (name in regionChildren) return@forEach
         val p = proxies[name]
         if (p != null && p.isGroup) {
             GroupNode(p, proxies, depth + 1, isMain = false, initiallyExpanded = false, busy = busy, vm = vm, parent = g)

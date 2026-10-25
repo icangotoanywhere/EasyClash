@@ -123,15 +123,21 @@ fun AdvancedScreen(vm: MainViewModel) {
         // ================= 自动选节点 =================
         var kw by remember(settings.backupKeyword) { mutableStateOf(settings.backupKeyword) }
         var penalty by remember(settings.backupPenaltyMs) { mutableStateOf(settings.backupPenaltyMs.toString()) }
+        var interval by remember(settings.testIntervalMin) { mutableStateOf(settings.testIntervalMin.toString()) }
         SectionCard(
-            title = "自动选节点：优先 / 备用",
-            help = "有些节点测延迟很快，真用起来却经常卡（典型的是经 CDN「中转」的节点：到 CDN 很近，但 CDN 再回机场源站那一段不稳）。纯按延迟挑，总是会选中它们。\n\n" +
+            title = "自动测速与选节点",
+            help = "【自动测速间隔】锁定地区后，每隔这么多分钟把该地区的节点测一遍，自动换到最快的（分级时同时判断用优先还是备用）。一次测速每个节点只发一个很小的请求，21 个节点约 10 KB 流量；间隔越短换节点越及时，但手机上会略微增加耗电，建议 2～10 分钟。\n\n【优先 / 备用】有些节点测延迟很快，真用起来却经常卡（典型的是经 CDN「中转」的节点：到 CDN 很近，但 CDN 再回机场源站那一段不稳）。纯按延迟挑，总是会选中它们。\n\n" +
                 "开启分级后，每个地区的「·自动」组会拆成两级：\n" +
                 "• 优先：名字不含关键字的节点，平时一律在这里面挑最快的\n" +
                 "• 备用：名字含关键字的节点\n\n" +
                 "每个测速周期（5 分钟）把两级都测一遍：只有当「优先」里最快的节点比「备用」里最快的还慢超过设定毫秒数时，才改用备用；优先节点恢复后自动切回。优先级全部超时也会自动用备用。\n\n" +
                 "关键字留空 = 不分级，纯按延迟选。如果你的机场「中转」节点质量很好，就把关键字清掉。",
         ) {
+            OutlinedTextField(
+                value = interval, onValueChange = { interval = it.filter(Char::isDigit).take(4) },
+                label = { Text("自动测速间隔（分钟）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            HelpText("默认 5。锁定地区时每隔这么久自动重测并切到最快节点。", Modifier.padding(bottom = 8.dp))
             HelpText("名字含关键字的节点降为备用，只在其他节点明显更慢时才用。", Modifier.padding(bottom = 4.dp))
             OutlinedTextField(
                 value = kw, onValueChange = { kw = it.take(20) },
@@ -145,7 +151,8 @@ fun AdvancedScreen(vm: MainViewModel) {
             HelpText("默认 100：优先节点 250ms、备用 100ms → 慢了 150ms，超过 100 → 用备用；优先 180ms、备用 100ms → 只慢 80ms → 仍用优先。")
             TextButton(onClick = {
                 val p = penalty.toIntOrNull() ?: 100
-                vm.updateSettings { it.backupKeyword = kw.trim(); it.backupPenaltyMs = p.coerceIn(0, 5000) }
+                val m = (interval.toIntOrNull() ?: 5).coerceIn(1, 1440)
+                vm.updateSettings { it.backupKeyword = kw.trim(); it.backupPenaltyMs = p.coerceIn(0, 5000); it.testIntervalMin = m }
             }) { Text("保存") }
         }
 

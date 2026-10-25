@@ -1,4 +1,5 @@
-# 云端编译：push / 手动运行 → 产物在 Artifacts；推 v* 标签 → 自动创建 Release 并附上 APK
+# 云端编译：push / 手动运行 → 产物在 Artifacts；推到 main → 按 build.gradle.kts 里的版本号自动打 tag、发布 Release 并附上 APK
+# （推 v* 标签或在网页上 Publish release 也会把 APK 挂到对应 Release 上）
 name: Build APK
 
 on:
@@ -93,8 +94,30 @@ jobs:
           git -c user.name=github-actions -c user.email=actions@github.com commit -qm "EasyClash $ver APK（源码 ${GITHUB_SHA::7}）"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk:apk
 
+      # 推到 main：版本号来自 build.gradle.kts 的 versionName。标签不存在就创建并发布 Release；已存在则只更新该 Release 的 APK
+      - name: Read version
+        if: github.ref == 'refs/heads/main'
+        id: ver
+        run: |
+          ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "tag=v$ver" >> "$GITHUB_OUTPUT"
+          cp app/build/outputs/apk/release/app-release.apk "EasyClash-v$ver.apk"
+          # 取本次推送里的提交说明作为发布说明（第一行是标题，去掉署名行）
+          git log -1 --format=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > "$RUNNER_TEMP/notes.md" || true
+
+      - name: Publish Release (push to main)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: EasyClash ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          body_path: ${{ runner.temp }}/notes.md
+          files: EasyClash-v*.apk
+          make_latest: true
+
       # 推 v* 标签，或在网页上 Publish release，都会把 APK 挂到对应 Release 上
-      - name: Attach APK to Release
+      - name: Attach APK to Release (tag / web release)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
