@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.easyclash.EasyClashApp
 import com.easyclash.core.ConfigBuilder
+import com.easyclash.core.RegionLock
 import com.easyclash.core.Regions
 import com.easyclash.data.AppInfo
 import com.easyclash.data.ConnectionItem
@@ -106,10 +107,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectProxy(group: String, name: String) = viewModelScope.launch {
         val api = VpnState.api ?: return@launch
-        runCatching { api.select(group, name) }.onFailure { say("切换失败：${it.message}") }
-        // 用户手动改了主组，说明不想再锁地区
-        if (group == mainGroup && name != ConfigBuilder.REGION_SELECTOR && settings.value.lockedRegion != null) {
-            store.update { it.lockedRegion = null }
+        runCatching { api.select(group, name) }.onFailure { say("切换失败：${it.message}"); return@launch }
+        if (settings.value.lockedRegion != null && group != ConfigBuilder.REGION_SELECTOR) {
+            when {
+                group == mainGroup && name != ConfigBuilder.REGION_SELECTOR -> {
+                    // 用户手动改了主组，说明不想再锁地区：其他组恢复锁定前的选择
+                    RegionLock.release(api, store, mainGroup, skip = group)
+                    store.update { it.lockedRegion = null }
+                }
+                // 锁定期间单独给某个组指定了别的：尊重这个选择，重新应用锁定时跳过它
+                name != ConfigBuilder.REGION_SELECTOR -> store.update { it.regionExempt.add(group); it.regionSaved.remove(group) }
+                else -> store.update { it.regionExempt.remove(group) }
+            }
         }
         refreshProxies()
     }
@@ -156,19 +165,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** 锁定地区：主组 → 地区选择 → 对应地区的自动组。code 为 null 表示解除锁定 */
     fun lockRegion(code: String?) = viewModelScope.launch {
         store.update { it.lockedRegion = code }
+        // 未连接时只记下设置：解除锁定的恢复留到下次连接时做（见 EasyClashVpnService.applyRegionLock）
         val api = VpnState.api ?: return@launch
         if (code == null) {
-            // 解锁：主组改回第一个非地区选择的条目
-            val main = _proxies.value[mainGroup]
-            val first = main?.all?.firstOrNull { it != ConfigBuilder.REGION_SELECTOR }
-            if (first != null) runCatching { api.select(mainGroup, first) }
+            runCatching { RegionLock.release(api, store, mainGroup) }
         } else {
             val region = Regions.of(code) ?: return@launch
             if (regionGroups.none { it.code == code }) { say("当前订阅里没有${region.displayName}的节点"); return@launch }
-            runCatching {
-                api.select(ConfigBuilder.REGION_SELECTOR, region.groupName)
-                api.select(mainGroup, ConfigBuilder.REGION_SELECTOR)
-            }.onFailure { say("切换失败：${it.message}") }
+            runCatching { RegionLock.apply(api, store, mainGroup, region) }.onFailure { say("切换失败：${it.message}") }
         }
         refreshProxies()
     }

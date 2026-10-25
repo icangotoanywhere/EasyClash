@@ -15,6 +15,7 @@ import com.easyclash.EasyClashApp
 import com.easyclash.R
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
+import com.easyclash.core.RegionLock
 import com.easyclash.data.AppProxyMode
 import com.easyclash.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -142,14 +143,20 @@ class EasyClashVpnService : VpnService() {
         }
     }
 
-    /** 用户在首页锁定了某个地区时，启动后把主组指到该地区的自动测速组 */
+    /**
+     * 连接 / 重载后调用：已锁定地区就重新应用（所有走代理的组切到「地区选择」）；
+     * 已解除但还有没恢复的组（断开时解除的）就恢复锁定前的选择。
+     */
     private suspend fun applyRegionLock(api: CoreApi, mainGroup: String) {
-        val code = EasyClashApp.instance.store.settings.value.lockedRegion ?: return
-        val region = VpnState.regionGroups.firstOrNull { it.code == code } ?: return
-        runCatching {
-            api.select(ConfigBuilder.REGION_SELECTOR, region.groupName)
-            api.select(mainGroup, ConfigBuilder.REGION_SELECTOR)
+        val store = EasyClashApp.instance.store
+        val s = store.settings.value
+        val code = s.lockedRegion
+        if (code == null) {
+            if (s.regionSaved.isNotEmpty()) runCatching { RegionLock.release(api, store, mainGroup) }
+            return
         }
+        val region = VpnState.regionGroups.firstOrNull { it.code == code } ?: return
+        runCatching { RegionLock.apply(api, store, mainGroup, region) }
     }
 
     private fun buildTun(mode: AppProxyMode, apps: Set<String>, ipv6: Boolean): ParcelFileDescriptor? {

@@ -152,10 +152,17 @@ object ConfigBuilder {
                 sel["proxies"] = createdRegions.map { it.groupName }
                 groups += sel
             }
-            // 追加到主组末尾（不放最前面，避免改变用户原来的选择）
-            val main = groups.first { it["name"] == mainGroup }
-            val list = (main["proxies"] as? List<Any?>)?.map { it.toString() }?.toMutableList() ?: mutableListOf()
-            if (REGION_SELECTOR !in list) { list += REGION_SELECTOR; main["proxies"] = list }
+            // 每个能选代理的手动组（含主组）末尾都加上「🌍 地区选择」这一项：锁定地区时把它们都切过去（见 RegionLock），
+            // 所有走代理的流量就都从该地区出去。加在末尾，不改变订阅原来的默认选择。
+            val nonProxy = setOf("DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE")
+            for (g in groups) {
+                val name = g["name"]?.toString() ?: continue
+                if (name == REGION_SELECTOR || !isSelect(g)) continue
+                val list = (g["proxies"] as? List<Any?>)?.map { it.toString() }?.toMutableList() ?: mutableListOf()
+                val canProxy = name == mainGroup || g["use"] != null || g["include-all"] == true || g["include-all-proxies"] == true ||
+                    list.any { it.uppercase() !in nonProxy }
+                if (canProxy && REGION_SELECTOR !in list) { list += REGION_SELECTOR; g["proxies"] = list }
+            }
         }
 
         // ---------- 在线规则集 / 地理数据库的下载线路 ----------

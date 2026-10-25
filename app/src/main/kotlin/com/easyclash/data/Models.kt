@@ -79,6 +79,8 @@ data class Settings(
     var geoAutoUpdate: Boolean = true,           // 连接后自动检查地理数据库（每 7 天一次）
     var geoLastCheck: Long = 0L,                 // 上次成功检查 / 更新数据库的时间（毫秒）
     var geoLastAttempt: Long = 0L,               // 上次尝试时间，失败后 12 小时内不再自动重试
+    var regionSaved: MutableMap<String, String> = mutableMapOf(),  // 锁定地区时被切到「地区选择」的组及其原来的选择
+    var regionExempt: MutableSet<String> = mutableSetOf(),         // 锁定期间用户单独指定过的组（重新应用锁定时跳过）
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("selectedSubId", selectedSubId ?: JSONObject.NULL)
@@ -91,6 +93,8 @@ data class Settings(
         put("extraRules", extraRules); put("overrideYaml", overrideYaml)
         put("mixedPort", mixedPort)
         put("geoAutoUpdate", geoAutoUpdate); put("geoLastCheck", geoLastCheck); put("geoLastAttempt", geoLastAttempt)
+        put("regionSaved", JSONObject().apply { regionSaved.forEach { (k, v) -> put(k, v) } })
+        put("regionExempt", JSONArray(regionExempt.toList()))
     }
 
     companion object {
@@ -114,6 +118,8 @@ data class Settings(
             s.geoAutoUpdate = o.optBoolean("geoAutoUpdate", true)
             s.geoLastCheck = o.optLong("geoLastCheck", 0L)
             s.geoLastAttempt = o.optLong("geoLastAttempt", 0L)
+            o.optJSONObject("regionSaved")?.let { j -> j.keys().forEach { k -> s.regionSaved[k] = j.optString(k) } }
+            o.optJSONArray("regionExempt")?.let { a -> (0 until a.length()).forEach { s.regionExempt.add(a.getString(it)) } }
             return s
         }
     }

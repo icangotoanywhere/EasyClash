@@ -116,11 +116,12 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
         SectionCard(
             title = "代理出口地区",
             help = "软件会按节点名字自动把订阅里的节点按国家/地区分组，并在每个地区里自动挑延迟最低的那个节点。\n\n" +
-                "选中一个地区后，代理出口就固定在该地区，哪怕订阅更新或重新连接也不变。\n\n" +
+                "选中一个地区后，所有走代理的流量都从该地区出去——包括订阅里单独分流的 Claude、ChatGPT、Gemini、Netflix 等；本来就直连的（国内网站等）仍然直连。哪怕订阅更新或重新连接也不变。\n\n" +
+                "锁定期间如果在「节点」页给某个服务单独指定了别的节点（比如 Netflix 用日本），会保留你的这个选择。\n\n" +
                 "注意：地区按机场给节点起的名字判断，并不能保证节点的真实出口 IP 就在那个国家。\n\n" +
-                "选「不锁定」则恢复为你在「节点」页手动选的线路。",
+                "选「不锁定」则恢复锁定前各策略组的选择。",
         ) {
-            HelpText("把代理出口固定在某个国家/地区，自动用该地区最快的节点。", Modifier.padding(bottom = 8.dp))
+            HelpText("把所有走代理的流量固定在某个国家/地区，自动用该地区最快的节点。", Modifier.padding(bottom = 8.dp))
             if (!connected) {
                 HelpText("连接后会在这里显示订阅里有哪些地区可选。")
                 if (settings.lockedRegion != null) HelpText("当前已锁定：${settings.lockedRegion}（连接后生效）")

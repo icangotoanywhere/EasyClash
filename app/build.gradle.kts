@@ -12,8 +12,8 @@ android {
         applicationId = "com.easyclash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.0.15"
+        versionCode = 18
+        versionName = "1.0.17"
         // 只打 arm64 一种架构：几乎所有现代安卓手机都是 arm64，包体最小
         ndk { abiFilters += listOf("arm64-v8a") }
     }

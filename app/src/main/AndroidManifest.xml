@@ -38,6 +38,11 @@
                 <data android:scheme="clash" android:host="install-config" />
                 <data android:scheme="clashmeta" android:host="install-config" />
             </intent-filter>
+            <!-- 长按下拉菜单里的磁贴时打开本软件主界面（不声明的话，系统会打开「应用信息」页） -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <!-- 长按桌面图标的快捷方式 -->
             <meta-data
                 android:name="android.app.shortcuts"
