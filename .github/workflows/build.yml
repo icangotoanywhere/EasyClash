@@ -80,6 +80,19 @@ jobs:
           name: easyclash-apk
           path: EasyClash-*.apk
 
+      # 推到 main 时把 APK 放到一个独立的 apk 分支（只保留最新一份），不用登录也能用 git 拉到，方便直接发到手机
+      - name: Publish APK to branch "apk"
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          d=$(mktemp -d)
+          cp app/build/outputs/apk/release/app-release.apk "$d/EasyClash-$ver.apk"
+          cd "$d"
+          git init -q -b apk
+          git -c user.name=github-actions -c user.email=actions@github.com add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "EasyClash $ver APK（源码 ${GITHUB_SHA::7}）"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk:apk
+
       # 推 v* 标签，或在网页上 Publish release，都会把 APK 挂到对应 Release 上
       - name: Attach APK to Release
         if: startsWith(github.ref, 'refs/tags/v')
