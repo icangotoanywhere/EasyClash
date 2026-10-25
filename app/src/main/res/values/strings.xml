@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EasyClash</string>
+    <string name="notification_channel">连接状态</string>
+    <string name="shortcut_connect">连接</string>
+    <string name="shortcut_disconnect">断开</string>
+</resources>

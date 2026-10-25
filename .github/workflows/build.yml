@@ -1,0 +1,65 @@
+# 云端编译：push / 手动运行 → 产物在 Artifacts；推 v* 标签 → 自动创建 Release 并附上 APK
+name: Build APK
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+
+      - uses: actions/setup-go@v5
+        with: { go-version: 'stable' }
+
+      - uses: android-actions/setup-android@v3
+        with: { packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018' }
+
+      - name: Build mihomo core (gomobile, tags with_gvisor,cmfa)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
+          JDK_JAVAC_OPTIONS: -encoding UTF-8
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          gomobile init
+          cd core
+          go get github.com/metacubex/mihomo@latest
+          go get golang.org/x/mobile/bind@latest
+          go mod tidy
+          mkdir -p ../app/libs
+          gomobile bind -target android/arm64 -androidapi 26 -tags with_gvisor,cmfa -ldflags "-s -w" -trimpath -o ../app/libs/core.aar .
+
+      - name: Download geo databases
+        run: |
+          mkdir -p app/src/main/assets
+          for f in geoip.metadb geosite.dat GeoLite2-ASN.mmdb; do
+            curl -fsSL -o app/src/main/assets/$f https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/$f || true
+          done
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk EasyClash-${GITHUB_REF_NAME}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyclash-apk
+          path: EasyClash-*.apk
+
+      - name: Release (on v* tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: EasyClash-*.apk
+          generate_release_notes: true
