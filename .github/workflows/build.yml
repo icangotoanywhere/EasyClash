@@ -5,6 +5,8 @@ on:
   push:
     branches: ["**"]
     tags: ["v*"]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -57,7 +59,8 @@ jobs:
           name: easyclash-apk
           path: EasyClash-*.apk
 
-      - name: Release (on v* tag)
+      # 推 v* 标签，或在网页上 Publish release，都会把 APK 挂到对应 Release 上
+      - name: Attach APK to Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
