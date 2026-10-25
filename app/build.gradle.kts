@@ -12,8 +12,8 @@ android {
         applicationId = "com.easyclash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "1.0.11"
+        versionCode = 15
+        versionName = "1.0.14"
         // 只打 arm64 一种架构：几乎所有现代安卓手机都是 arm64，包体最小
         ndk { abiFilters += listOf("arm64-v8a") }
     }
@@ -63,5 +63,5 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.yaml:snakeyaml:2.3")
+    implementation("org.yaml:snakeyaml:2.5")
 }

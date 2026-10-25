@@ -18,6 +18,7 @@ import com.easyclash.core.CoreApi
 import com.easyclash.data.AppProxyMode
 import com.easyclash.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -41,6 +42,8 @@ class EasyClashVpnService : VpnService() {
         private const val CHANNEL = "easyclash_vpn"
         private const val NOTIFY_ID = 1
         const val CONTROLLER_PORT = 16090
+        private const val GEO_CHECK_INTERVAL = 7L * 24 * 3600 * 1000   // 地理数据库每 7 天检查一次
+        private const val GEO_RETRY_INTERVAL = 12L * 3600 * 1000       // 失败后 12 小时内不再自动重试
 
         fun start(ctx: Context) {
             val i = Intent(ctx, EasyClashVpnService::class.java).setAction(ACTION_START)
@@ -56,6 +59,9 @@ class EasyClashVpnService : VpnService() {
     private var trafficWs: WebSocket? = null
     private var logWs: WebSocket? = null
     private var secret = ""
+    // 连接后的后台维护（补下载规则集、更新地理数据库）。耗时较长，不能放进上面的单线程 scope，否则会挡住断开/重载
+    private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var maintJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -128,6 +134,7 @@ class EasyClashVpnService : VpnService() {
             VpnState.setStatus(Status.CONNECTED)
             updateNotification("已连接 · ${sub.name}")
             startTrafficMonitor(api)
+            startMaintenance(api)
         } catch (e: Throwable) {
             VpnState.appendLog("[APP] 启动失败：${e.message}")
             VpnState.setError(friendly(e))
@@ -202,8 +209,42 @@ class EasyClashVpnService : VpnService() {
             VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
             updateNotification("已连接 · ${sub.name}")
+            startMaintenance(api, checkGeo = false)
         } catch (e: Throwable) {
             VpnState.setError("重载配置失败：${friendly(e)}")
+        }
+    }
+
+    // ---------------- 后台维护 ----------------
+    private fun startMaintenance(api: CoreApi, checkGeo: Boolean = true) {
+        maintJob?.cancel()
+        maintJob = bgScope.launch {
+            // 1. 规则集补下载：启动瞬间节点可能还没就绪，首次下载失败的规则集要等订阅设定的间隔（通常一天）才会重试
+            delay(8_000)
+            runCatching {
+                val failed = api.ruleProviders().filter { it.isHttp && it.neverLoaded }
+                if (failed.isNotEmpty()) {
+                    VpnState.appendLog("[APP] ${failed.size} 个规则集首次下载失败，重试中…")
+                    var ok = 0
+                    for (p in failed) if (runCatching { api.updateRuleProvider(p.name) }.isSuccess) ok++
+                    VpnState.appendLog("[APP] 规则集重试完成：成功 $ok / ${failed.size}")
+                }
+            }
+            if (!checkGeo) return@launch
+            // 2. 地理数据库自动更新（内核嵌入模式下自己不会更新，由这里定期触发）
+            val store = EasyClashApp.instance.store
+            val s = store.settings.value
+            val now = System.currentTimeMillis()
+            if (!s.geoAutoUpdate || now - s.geoLastCheck < GEO_CHECK_INTERVAL || now - s.geoLastAttempt < GEO_RETRY_INTERVAL) return@launch
+            store.update { it.geoLastAttempt = now }
+            VpnState.appendLog("[APP] 地理数据库超过 7 天未检查，后台更新中…")
+            val err = runCatching { core.Core.updateGeo() }.getOrElse { it.message ?: "未知错误" }
+            if (err.isEmpty()) {
+                store.update { it.geoLastCheck = System.currentTimeMillis() }
+                VpnState.appendLog("[APP] 地理数据库检查完成，已是最新")
+            } else {
+                VpnState.appendLog("[APP] 地理数据库更新失败：$err（12 小时后再试）")
+            }
         }
     }
 
@@ -211,6 +252,7 @@ class EasyClashVpnService : VpnService() {
     private suspend fun stopEverything(reason: String) {
         VpnState.appendLog("[APP] 断开：$reason")
         VpnState.setStatus(Status.STOPPING)
+        maintJob?.cancel(); maintJob = null
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null
         withContext(Dispatchers.IO) { runCatching { core.Core.stop() } }
@@ -230,6 +272,7 @@ class EasyClashVpnService : VpnService() {
         // 必须同步清理，否则系统销毁服务时内核会残留运行、TUN 泄漏
         if (VpnState.status.value != Status.IDLE) runBlocking { stopEverything("服务被系统销毁") }
         scope.cancel()
+        bgScope.cancel()
         super.onDestroy()
     }
 

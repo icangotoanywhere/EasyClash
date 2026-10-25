@@ -68,6 +68,9 @@ fun AdvancedScreen(vm: MainViewModel) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
 
+        // ================= 规则与地理数据库 =================
+        RulesSection(vm)
+
         // ================= 网络 =================
         SectionCard(title = "网络选项", help = "一般不需要改。遇到具体问题时按说明调整，改完会自动重载（已连接时）。") {
             SwitchRow(
@@ -127,7 +130,8 @@ fun AdvancedScreen(vm: MainViewModel) {
                 "DOMAIN-KEYWORD,google,PROXY        域名包含关键词\n" +
                 "DOMAIN,www.a.com,REJECT            完整域名\n" +
                 "IP-CIDR,8.8.8.0/24,DIRECT          IP 段\n" +
-                "GEOIP,CN,DIRECT                    按 IP 所属国家\n\n" +
+                "GEOIP,CN,DIRECT                    按 IP 所属国家\n" +
+                "GEOSITE,cn,DIRECT                  按网站分类（内置数据库）\n\n" +
                 "去向可以是 DIRECT（直连）、REJECT（拒绝）或你订阅里任何一个策略组的名字。\n\n" +
                 "以 # 开头的行是注释，会被忽略。",
         ) {

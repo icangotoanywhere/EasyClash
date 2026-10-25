@@ -17,6 +17,8 @@ import (
 	"syscall"
 
 	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/geodata"
+	"github.com/metacubex/mihomo/component/updater"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/hub"
 	"github.com/metacubex/mihomo/hub/executor"
@@ -163,6 +165,43 @@ func IsRunning() bool {
 	mu.Lock()
 	defer mu.Unlock()
 	return running
+}
+
+// UpdateGeo downloads the latest versions of the geo databases that the current
+// rules actually use (GeoIP / GeoSite / ASN) and hot-reloads them. Downloads go
+// through the running core and follow its rules. Blocks until finished (up to
+// ~90 s per file), so call it off the main thread. Returns "" on success
+// (including "already up to date"), otherwise the error text.
+//
+// mihomo only starts its own geo auto-updater from the CLI main(), and the
+// /configs/geo API is disabled in Android embed mode, hence this bridge.
+func UpdateGeo() string {
+	if !IsRunning() {
+		return "内核未运行"
+	}
+	if err := updater.UpdateGeoDatabases(); err != nil {
+		if errors.Is(err, updater.ErrGetDatabaseUpdateSkip) {
+			return "正在更新中，请稍候"
+		}
+		return err.Error()
+	}
+	return ""
+}
+
+// GeoInUse reports which geo databases the loaded rules use, comma separated
+// ("geoip", "geosite", "asn"). Empty when none.
+func GeoInUse() string {
+	var s []string
+	if geodata.GeoIpEnable() {
+		s = append(s, "geoip")
+	}
+	if geodata.GeoSiteEnable() {
+		s = append(s, "geosite")
+	}
+	if geodata.ASNEnable() {
+		s = append(s, "asn")
+	}
+	return strings.Join(s, ",")
 }
 
 // Validate parses a config without starting the core. It returns "" when valid,

@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+env:
+  # 与本地编译验证过的版本保持一致（core/core.go 用到了它的地理数据库更新接口）
+  MIHOMO_VERSION: v1.19.33
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,14 +36,25 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/27.2.12479018
           JDK_JAVAC_OPTIONS: -encoding UTF-8
         run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          gomobile init
-          cd core
-          go get github.com/metacubex/mihomo@latest
-          go get golang.org/x/mobile/bind@latest
-          go mod tidy
-          mkdir -p ../app/libs
-          gomobile bind -target android/arm64 -androidapi 26 -tags with_gvisor,cmfa -ldflags "-s -w" -trimpath -o ../app/libs/core.aar .
+          # 失败时把日志末尾写成错误注解，在 Actions 页面（及 API）上直接能看到原因
+          (
+            set -ex
+            go version
+            echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"; ls "$ANDROID_NDK_HOME" | head -5
+            go install golang.org/x/mobile/cmd/gomobile@latest
+            gomobile init
+            cd core
+            go get github.com/metacubex/mihomo@${MIHOMO_VERSION}
+            go get golang.org/x/mobile/bind@latest
+            go mod tidy
+            mkdir -p ../app/libs
+            gomobile bind -target android/arm64 -androidapi 26 -tags with_gvisor,cmfa -ldflags "-s -w" -trimpath -o ../app/libs/core.aar .
+          ) > "$RUNNER_TEMP/core.log" 2>&1 && ok=1 || ok=0
+          cat "$RUNNER_TEMP/core.log"
+          if [ "$ok" != 1 ]; then
+            echo "::error title=内核编译失败::$(tail -n 40 "$RUNNER_TEMP/core.log" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN{ORS="%0A"}{print}')"
+            exit 1
+          fi
 
       - name: Download geo databases
         run: |
@@ -51,7 +66,12 @@ jobs:
       - name: Build APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon > "$RUNNER_TEMP/apk.log" 2>&1 && ok=1 || ok=0
+          cat "$RUNNER_TEMP/apk.log"
+          if [ "$ok" != 1 ]; then
+            echo "::error title=APK 编译失败::$(grep -E '^e: |error:|FAILURE|What went wrong' -A3 "$RUNNER_TEMP/apk.log" | tail -n 40 | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN{ORS="%0A"}{print}')"
+            exit 1
+          fi
           cp app/build/outputs/apk/release/app-release.apk EasyClash-${GITHUB_REF_NAME}.apk
 
       - uses: actions/upload-artifact@v4

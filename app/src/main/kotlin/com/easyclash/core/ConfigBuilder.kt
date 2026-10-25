@@ -14,7 +14,7 @@ import java.io.File
  * 做的事情：
  *  1. 去掉订阅里与手机环境冲突的字段（端口、tun、控制接口等），换成我们自己的
  *  2. 按地区自动生成 "🇸🇬 新加坡·自动" 这类测速组和一个 "🌍 地区选择" 组
- *  3. 插入用户附加规则 / QUIC 拦截
+ *  3. 规则：插入用户附加规则 / QUIC 拦截；在线规则集与地理数据库固定走代理下载；订阅没带规则时补基础分流
  *  4. 应用高级页的 YAML 覆写
  *  5. 注入 TUN（VpnService 的文件描述符）与 DNS
  */
@@ -26,6 +26,15 @@ object ConfigBuilder {
     const val TUN_ADDR6 = "fdfe:dcba:9876::1"
     const val TUN_MTU = 9000
     const val FALLBACK_MAIN_GROUP = "🚀 节点选择"
+    const val GEO_MIRROR_HOST = "testingcf.jsdelivr.net"
+
+    /** 订阅没带分流规则时补上的基础分流（GEOSITE 用内置 geosite.dat，GEOIP 用内置 geoip.metadb） */
+    val BASIC_RULES = listOf(
+        "GEOIP,LAN,DIRECT,no-resolve",
+        "GEOSITE,private,DIRECT",
+        "GEOSITE,cn,DIRECT",
+        "GEOIP,CN,DIRECT",
+    )
 
     class BuildError(msg: String) : Exception(msg)
 
@@ -91,6 +100,8 @@ object ConfigBuilder {
         val providerNames = (cfg["proxy-providers"] as? Map<String, Any?>)?.keys?.toList() ?: emptyList()
         val groups = (cfg["proxy-groups"] as? List<Map<String, Any?>>)?.map { LinkedHashMap(it) }?.toMutableList() ?: mutableListOf()
         val rules = (cfg["rules"] as? List<Any?>)?.map { it.toString() }?.toMutableList() ?: mutableListOf()
+        // 订阅自己有没有写分流规则（只有一条 MATCH 不算）
+        val subHasRules = rules.any { !it.trim().startsWith("MATCH,") }
 
         val nodeNames = proxies.mapNotNull { it["name"]?.toString() }
         val existingGroupNames = groups.mapNotNull { it["name"]?.toString() }.toMutableSet()
@@ -147,7 +158,32 @@ object ConfigBuilder {
             if (REGION_SELECTOR !in list) { list += REGION_SELECTOR; main["proxies"] = list }
         }
 
+        // ---------- 在线规则集 / 地理数据库的下载线路 ----------
+        // 订阅引用的在线规则集（Netflix、广告拦截、国内网站列表等）和地理数据库大多放在国外网站上，国内直连下不了。
+        // 内核默认按规则去下载，而很多订阅的兜底组默认指向"直连"，结果规则集全部下载失败、等于没有。
+        // 这里固定让它们走代理：有地区选择组就用它（即首页选的出口地区），否则用主组。订阅自己写了 proxy 的不动。
+        val downloadVia = if (createdRegions.isNotEmpty()) REGION_SELECTOR else mainGroup
+        (cfg["rule-providers"] as? Map<String, Any?>)?.let { rp ->
+            val fixed = LinkedHashMap<String, Any?>()
+            for ((name, v) in rp) {
+                val m = (v as? Map<String, Any?>)?.let { LinkedHashMap(it) }
+                if (m != null && m["type"]?.toString().equals("http", true) && m["proxy"] == null) m["proxy"] = downloadVia
+                fixed[name] = m ?: v
+            }
+            cfg["rule-providers"] = fixed
+        }
+
         // ---------- 3. 规则 ----------
+        if (!subHasRules) {
+            // 订阅没带分流规则：补一套基础分流，局域网和国内网站、国内 IP 直连，其余走主组
+            val subMatch = rules.lastOrNull { it.trim().startsWith("MATCH,") }
+            rules.clear()
+            rules += BASIC_RULES
+            rules += subMatch ?: "MATCH,$mainGroup"
+        } else if (rules.none { it.trim().startsWith("MATCH,") }) {
+            // 有规则但没有兜底：没命中的流量内核默认直连，这里补成走主组
+            rules += "MATCH,$mainGroup"
+        }
         val front = mutableListOf<String>()
         if (settings.blockQuic) front += "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT"
         if (settings.bingDirect) {
@@ -155,6 +191,8 @@ object ConfigBuilder {
             front += listOf("bing.com", "bing.net", "bingapis.com", "bing.com.cn").map { "DOMAIN-SUFFIX,$it,DIRECT" }
         }
         settings.extraRules.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { front += it }
+        // 地理数据库的更新下载也固定走代理（理由同上）
+        if (!downloadVia.contains(',')) front += "DOMAIN,$GEO_MIRROR_HOST,$downloadVia"
         // 内核自己的控制接口与本地回环永远直连
         front += "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve"
         rules.addAll(0, front)
@@ -182,12 +220,13 @@ object ConfigBuilder {
         cfg["geodata-mode"] = false
         cfg["geo-auto-update"] = false
         cfg["profile"] = linkedMapOf("store-selected" to true, "store-fake-ip" to true)
-        // 国内可直接访问的 geo 数据库镜像，避免首次启动卡在下载上
+        // 地理数据库的更新下载地址（jsDelivr 镜像；数据库本身已打包在 APK 里，这里只用于"更新"）
+        val mirror = "https://$GEO_MIRROR_HOST/gh/MetaCubeX/meta-rules-dat@release"
         cfg["geox-url"] = linkedMapOf(
-            "geoip" to "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat",
-            "geosite" to "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
-            "mmdb" to "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb",
-            "asn" to "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb",
+            "geoip" to "$mirror/geoip.dat",
+            "geosite" to "$mirror/geosite.dat",
+            "mmdb" to "$mirror/geoip.metadb",
+            "asn" to "$mirror/GeoLite2-ASN.mmdb",
         )
 
         // 地址必须与 VpnService 里配置的一致，否则 system/mixed 栈无法正确回包

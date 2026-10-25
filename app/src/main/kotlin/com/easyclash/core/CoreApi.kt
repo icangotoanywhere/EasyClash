@@ -2,6 +2,7 @@ package com.easyclash.core
 
 import com.easyclash.data.ConnectionItem
 import com.easyclash.data.ProxyItem
+import com.easyclash.data.RuleProviderInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -131,6 +132,27 @@ class CoreApi(private val port: Int, private val secret: String) {
 
     /** 更新某个订阅提供者（proxy-provider） */
     suspend fun updateProvider(name: String) { call(req("/providers/proxies/${enc(name)}").put("".toRequestBody(json))) }
+
+    /** 订阅引用的规则集（rule-providers）及其加载情况 */
+    suspend fun ruleProviders(): List<RuleProviderInfo> {
+        val obj = JSONObject(call(req("/providers/rules"))).optJSONObject("providers") ?: return emptyList()
+        return obj.keys().asSequence().map { k ->
+            val o = obj.getJSONObject(k)
+            RuleProviderInfo(
+                name = o.optString("name", k),
+                ruleCount = o.optInt("ruleCount", 0),
+                updatedAt = o.optString("updatedAt"),
+                vehicle = o.optString("vehicleType"),
+                behavior = o.optString("behavior"),
+            )
+        }.sortedBy { it.name }.toList()
+    }
+
+    /** 立即重新下载某个规则集 */
+    suspend fun updateRuleProvider(name: String) { call(req("/providers/rules/${enc(name)}").put("".toRequestBody(json))) }
+
+    /** 当前生效的规则条数（规则集按一条算） */
+    suspend fun ruleCount(): Int = JSONObject(call(req("/rules"))).optJSONArray("rules")?.length() ?: 0
 
     /** 实时流量（WebSocket），每秒回调一次 (上行字节/秒, 下行字节/秒) */
     fun trafficSocket(onData: (Long, Long) -> Unit, onClosed: () -> Unit): WebSocket {

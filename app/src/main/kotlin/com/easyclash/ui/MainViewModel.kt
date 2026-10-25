@@ -12,6 +12,7 @@ import com.easyclash.data.AppInfo
 import com.easyclash.data.ConnectionItem
 import com.easyclash.data.ProxyItem
 import com.easyclash.data.ProxyMode
+import com.easyclash.data.RuleProviderInfo
 import com.easyclash.data.Settings
 import com.easyclash.data.Subscription
 import com.easyclash.vpn.EasyClashVpnService
@@ -24,6 +25,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 界面状态与所有用户操作。界面层只调用这里的方法，不直接碰服务或内核。
@@ -251,5 +256,69 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun logsText(): String = VpnState.logs.value.joinToString("\n")
 
     suspend fun coreVersion(): String = withContext(Dispatchers.IO) { runCatching { core.Core.version() }.getOrDefault("未知") }
+
+    // ---------- 规则与地理数据库 ----------
+    data class RulesInfo(val ruleCount: Int, val providers: List<RuleProviderInfo>, val geoInUse: Set<String>)
+    data class GeoFileInfo(val key: String, val label: String, val date: String?)
+
+    private val _rulesInfo = MutableStateFlow<RulesInfo?>(null)
+    val rulesInfo: StateFlow<RulesInfo?> = _rulesInfo
+    private val _rulesBusy = MutableStateFlow(false)
+    val rulesBusy: StateFlow<Boolean> = _rulesBusy
+    private val _geoBusy = MutableStateFlow(false)
+    val geoBusy: StateFlow<Boolean> = _geoBusy
+    private val _geoTick = MutableStateFlow(0)   // 数据库文件变化后 +1，让界面重读文件日期
+    val geoTick: StateFlow<Int> = _geoTick
+
+    fun refreshRulesInfo() = viewModelScope.launch {
+        val api = VpnState.api ?: run { _rulesInfo.value = null; return@launch }
+        runCatching {
+            val n = api.ruleCount()
+            val p = api.ruleProviders()
+            val geo = withContext(Dispatchers.IO) { runCatching { core.Core.geoInUse() }.getOrDefault("") }
+            _rulesInfo.value = RulesInfo(n, p, geo.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet())
+        }
+    }
+
+    fun updateRuleProviders() = viewModelScope.launch {
+        val api = VpnState.api ?: return@launch
+        val list = runCatching { api.ruleProviders() }.getOrDefault(emptyList()).filter { it.isHttp }
+        if (list.isEmpty()) { say("订阅没有引用在线规则集"); return@launch }
+        _rulesBusy.value = true
+        var ok = 0
+        for (p in list) if (runCatching { api.updateRuleProvider(p.name) }.isSuccess) ok++
+        _rulesBusy.value = false
+        refreshRulesInfo()
+        say(if (ok == list.size) "规则集已全部更新（${list.size} 个）" else "规则集更新：成功 $ok 个，失败 ${list.size - ok} 个，原因见「诊断 → 查看日志」")
+    }
+
+    fun updateGeoNow() = viewModelScope.launch {
+        if (status.value != Status.CONNECTED) { say("请先连接"); return@launch }
+        _geoBusy.value = true
+        store.update { it.geoLastAttempt = System.currentTimeMillis() }
+        val err = withContext(Dispatchers.IO) { runCatching { core.Core.updateGeo() }.getOrElse { it.message ?: "未知错误" } }
+        _geoBusy.value = false
+        if (err.isEmpty()) {
+            store.update { it.geoLastCheck = System.currentTimeMillis() }
+            say("地理数据库已是最新")
+        } else {
+            say("数据库更新失败：$err")
+        }
+        _geoTick.value++
+        refreshRulesInfo()
+    }
+
+    /** 三个地理数据库文件的日期（内核工作目录里的那份；首次连接前还没从安装包复制出来） */
+    fun geoFiles(): List<GeoFileInfo> {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA)
+        return listOf(
+            Triple("geoip", "GeoIP（IP 归属国家）", "geoip.metadb"),
+            Triple("geosite", "GeoSite（网站分类）", "geosite.dat"),
+            Triple("asn", "ASN（IP 所属运营商）", "GeoLite2-ASN.mmdb"),
+        ).map { (key, label, name) ->
+            val f = File(store.homeDir, name)
+            GeoFileInfo(key, label, if (f.exists()) fmt.format(Date(f.lastModified())) else null)
+        }
+    }
 
 }

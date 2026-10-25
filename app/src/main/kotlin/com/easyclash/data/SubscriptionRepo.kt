@@ -56,7 +56,7 @@ class SubscriptionRepo(private val ctx: Context, private val store: Store) {
     /** 从本地文件导入（文件管理器选择的 YAML） */
     suspend fun importFromText(text: String, name: String): Subscription = withContext(Dispatchers.IO) {
         val count = ConfigBuilder.countProxies(text)
-        if (count < 0) throw SubError("文件不是有效的 Clash 配置（需要包含 proxies 或 proxy-providers）")
+        if (count < 0) throw SubError("文件不是有效的 Clash 配置（" + (runCatching { ConfigBuilder.load(text) }.exceptionOrNull()?.message ?: "需要包含 proxies 或 proxy-providers") + "）")
         val sub = Subscription(id = UUID.randomUUID().toString(), name = name, url = "", lastUpdate = System.currentTimeMillis(), nodeCount = count)
         store.subFile(sub.id).writeText(text)
         store.upsertSub(sub)
@@ -83,7 +83,7 @@ class SubscriptionRepo(private val ctx: Context, private val store: Store) {
             val count = ConfigBuilder.countProxies(body)
             if (count < 0) {
                 val hint = if (looksLikeBase64(body)) "这个链接返回的是 V2Ray/SS 分享链接格式，不是 Clash 格式。请回到机场网站选择「Clash」或「Mihomo」订阅链接。"
-                else "订阅内容不是有效的 Clash 配置。"
+                else "订阅内容不是有效的 Clash 配置（" + (runCatching { ConfigBuilder.load(body) }.exceptionOrNull()?.message ?: "缺少 proxies 或 proxy-providers") + "）"
                 throw SubError(hint)
             }
             if (count == 0) throw SubError("订阅里没有任何节点，可能已到期或流量用尽")

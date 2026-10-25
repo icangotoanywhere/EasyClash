@@ -41,7 +41,7 @@ data class Subscription(
 
 /** 出站模式：规则分流 / 全部走代理 / 全部直连 */
 enum class ProxyMode(val coreValue: String, val label: String, val help: String) {
-    RULE("rule", "规则", "按规则分流：国内网站直连、国外网站走代理。日常推荐。"),
+    RULE("rule", "规则", "按规则分流：国内网站直连、国外网站走代理。日常推荐。规则和 GeoIP 数据库都已内置，无需另外设置。"),
     GLOBAL("global", "全局", "所有流量都走代理，不分流。排查问题或临时需要时用。"),
     DIRECT("direct", "直连", "所有流量都不走代理，相当于关闭代理但保留 VPN 连接。"),
 }
@@ -76,6 +76,9 @@ data class Settings(
     var extraRules: String = "",                // 用户附加规则，每行一条，插在最前面
     var overrideYaml: String = "",              // 高级：YAML 覆写片段
     var mixedPort: Int = 17890,   // 7890 常被其他 Clash 占用
+    var geoAutoUpdate: Boolean = true,           // 连接后自动检查地理数据库（每 7 天一次）
+    var geoLastCheck: Long = 0L,                 // 上次成功检查 / 更新数据库的时间（毫秒）
+    var geoLastAttempt: Long = 0L,               // 上次尝试时间，失败后 12 小时内不再自动重试
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("selectedSubId", selectedSubId ?: JSONObject.NULL)
@@ -87,6 +90,7 @@ data class Settings(
         put("tunStack", tunStack.name); put("logLevel", logLevel)
         put("extraRules", extraRules); put("overrideYaml", overrideYaml)
         put("mixedPort", mixedPort)
+        put("geoAutoUpdate", geoAutoUpdate); put("geoLastCheck", geoLastCheck); put("geoLastAttempt", geoLastAttempt)
     }
 
     companion object {
@@ -107,6 +111,9 @@ data class Settings(
             s.extraRules = o.optString("extraRules", "")
             s.overrideYaml = o.optString("overrideYaml", "")
             s.mixedPort = o.optInt("mixedPort", 17890)
+            s.geoAutoUpdate = o.optBoolean("geoAutoUpdate", true)
+            s.geoLastCheck = o.optLong("geoLastCheck", 0L)
+            s.geoLastAttempt = o.optLong("geoLastAttempt", 0L)
             return s
         }
     }
@@ -137,6 +144,18 @@ data class ConnectionItem(
     val start: String,
     val process: String,
 )
+
+/** 订阅引用的一个规则集（来自内核 /providers/rules 接口） */
+data class RuleProviderInfo(
+    val name: String,
+    val ruleCount: Int,
+    val updatedAt: String,     // 内核给的时间字符串；从没下载成功过时为 0001-01-01...
+    val vehicle: String,       // HTTP（在线下载）/ File（本地文件）/ Inline
+    val behavior: String,
+) {
+    val isHttp: Boolean get() = vehicle.equals("HTTP", true)
+    val neverLoaded: Boolean get() = updatedAt.isBlank() || updatedAt.startsWith("0001")
+}
 
 /** 本地安装的应用（分应用代理用） */
 data class AppInfo(
