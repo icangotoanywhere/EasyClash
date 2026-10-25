@@ -137,8 +137,8 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                             label = { Text("不锁定") },
                         )
                         regions.forEach { r ->
-                            val g = proxies[r.groupName]
-                            val delay = g?.now?.let { proxies[it]?.delay } ?: 0
+                            // 分级地区的自动组下面还有一层，沿着一路找到真实节点取延迟
+                            val delay = proxies[resolveLeaf(proxies, r.groupName)]?.delay ?: 0
                             FilterChip(
                                 selected = settings.lockedRegion == r.code,
                                 onClick = { vm.lockRegion(r.code) },
@@ -166,8 +166,15 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
                     if (locked != null) {
                         Spacer(Modifier.height(4.dp))
                         KeyValueRow("锁定地区", "${locked.flag} ${locked.displayName}")
+                        if (vm.isTiered(locked.code)) {
+                            val tier = proxies[locked.groupName]?.now
+                            KeyValueRow("当前层级", if (tier == locked.backupGroup) "备用（优先节点明显更慢时才用）" else "优先")
+                        }
                         KeyValueRow("实际节点", resolveLeaf(proxies, locked.groupName))
-                        HelpText("每 5 分钟自动测速一次并切到最快节点；手动测速立即生效。")
+                        HelpText(
+                            if (vm.isTiered(locked.code)) "每 5 分钟把优先、备用两级都测一次：优先里最快的比备用慢超过 ${settings.backupPenaltyMs}ms 才用备用（高级页可改）。手动测速立即生效。"
+                            else "每 5 分钟自动测速一次并切到最快节点；手动测速立即生效。"
+                        )
                     }
                 }
             }

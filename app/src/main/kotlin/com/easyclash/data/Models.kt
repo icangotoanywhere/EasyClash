@@ -76,6 +76,10 @@ data class Settings(
     var extraRules: String = "",                // 用户附加规则，每行一条，插在最前面
     var overrideYaml: String = "",              // 高级：YAML 覆写片段
     var mixedPort: Int = 17890,   // 7890 常被其他 Clash 占用
+    /** 名字含此关键字的节点视为"备用"（例如经 CDN 中转、测速快但传数据不稳的节点）。空 = 不区分 */
+    var backupKeyword: String = "中转",
+    /** 优先节点比备用节点慢超过这么多毫秒，才改用备用节点 */
+    var backupPenaltyMs: Int = 100,
     var geoAutoUpdate: Boolean = true,           // 连接后自动检查地理数据库（每 7 天一次）
     var geoLastCheck: Long = 0L,                 // 上次成功检查 / 更新数据库的时间（毫秒）
     var geoLastAttempt: Long = 0L,               // 上次尝试时间，失败后 12 小时内不再自动重试
@@ -87,6 +91,7 @@ data class Settings(
         put("mode", mode.name); put("appProxyMode", appProxyMode.name)
         put("appList", JSONArray(appList.toList()))
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
+        put("backupKeyword", backupKeyword); put("backupPenaltyMs", backupPenaltyMs)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect)
         put("useSubscriptionDns", useSubscriptionDns)
         put("tunStack", tunStack.name); put("logLevel", logLevel)
@@ -107,6 +112,8 @@ data class Settings(
             s.appList = (0 until arr.length()).map { arr.getString(it) }.toMutableSet()
             s.lockedRegion = if (o.isNull("lockedRegion")) null else o.optString("lockedRegion")
             s.ipv6 = o.optBoolean("ipv6", false)
+            s.backupKeyword = o.optString("backupKeyword", "中转")
+            s.backupPenaltyMs = o.optInt("backupPenaltyMs", 100)
             s.blockQuic = o.optBoolean("blockQuic", true)
             s.bingDirect = o.optBoolean("bingDirect", true)
             s.useSubscriptionDns = o.optBoolean("useSubscriptionDns", false)

@@ -15,6 +15,9 @@ data class Region(
 ) {
     /** 内核里自动测速组的名字，例如 "🇸🇬 新加坡·自动"（内核侧保持不变） */
     val groupName: String get() = "$flag $name·自动"
+    /** 分级时的两个子组：优先节点组、备用节点组（见 ConfigBuilder / TierPicker） */
+    val primaryGroup: String get() = "$flag $name·优先"
+    val backupGroup: String get() = "$flag $name·备用"
 
     /** 界面上显示的地区名：港澳台显示为「中国香港」「中国澳门」「中国台湾」。name 仍用于识别节点名和内核组名 */
     val displayName: String get() = if (code in CHINA_SAR) "中国$name" else name

@@ -42,7 +42,11 @@ object ConfigBuilder {
         val file: File,
         val mainGroup: String,            // 主选择组名（MATCH 规则指向的组，或第一个 select 组）
         val regionGroups: List<Region>,   // 本次生成了哪些地区组
+        val tieredRegions: Set<String>,   // 其中哪些地区分了"优先/备用"两级（地区代码）
     )
+
+    /** 自动测速组的健康检查间隔（秒）。手机上保持 5 分钟，兼顾耗电 */
+    const val URL_TEST_INTERVAL = 300
 
     private fun yaml(): Yaml {
         val lo = LoaderOptions().apply {
@@ -107,24 +111,36 @@ object ConfigBuilder {
         val existingGroupNames = groups.mapNotNull { it["name"]?.toString() }.toMutableSet()
 
         val createdRegions = mutableListOf<Region>()
+        val tiered = mutableSetOf<String>()
+        val tierSelectors = mutableSetOf<String>()
+        val keyword = settings.backupKeyword.trim()
         for (region in Regions.all) {
             if (region.groupName in existingGroupNames) { createdRegions += region; continue }
             val matched = nodeNames.filter { Regions.match(it) == region }
             if (matched.isEmpty() && providerNames.isEmpty()) continue
-            val g = LinkedHashMap<String, Any?>()
-            g["name"] = region.groupName
-            g["type"] = "url-test"
-            g["url"] = "https://www.gstatic.com/generate_204"
-            g["interval"] = 300
-            g["tolerance"] = 50
-            g["lazy"] = true
-            if (matched.isNotEmpty()) g["proxies"] = matched
-            if (providerNames.isNotEmpty()) {
-                g["use"] = providerNames
-                g["filter"] = region.goPattern
-                g["exclude-filter"] = Regions.infoNodeRegex.pattern
+
+            // 分级：名字含备用关键字的节点单独一组。两边都有节点才分，否则就是普通的一个自动组
+            val backup = if (keyword.isEmpty()) emptyList() else matched.filter { it.contains(keyword, ignoreCase = true) }
+            val primary = matched - backup.toSet()
+            val useTiers = keyword.isNotEmpty() && backup.isNotEmpty() && (primary.isNotEmpty() || providerNames.isNotEmpty())
+
+            if (!useTiers) {
+                groups += urlTestGroup(region.groupName, matched, providerNames, region.goPattern, Regions.infoNodeRegex.pattern)
+            } else {
+                val kw = goEscape(keyword)
+                val rp = region.goPattern.removePrefix("(?i)")
+                // 优先组：该地区所有不含关键字的节点；备用组：该地区含关键字的节点
+                groups += urlTestGroup(region.primaryGroup, primary, providerNames, region.goPattern, "(?i)${Regions.infoNodeRegex.pattern}|$kw")
+                groups += urlTestGroup(region.backupGroup, backup, providerNames, "(?i)(?:$rp).*(?:$kw)|(?:$kw).*(?:$rp)", Regions.infoNodeRegex.pattern)
+                // 自动组本身变成一个选择组，由 App 里的 TierPicker 按"优先比备用慢多少"决定选哪一级
+                val sel = LinkedHashMap<String, Any?>()
+                sel["name"] = region.groupName
+                sel["type"] = "select"
+                sel["proxies"] = listOf(region.primaryGroup, region.backupGroup)
+                groups += sel
+                tiered += region.code
+                tierSelectors += region.groupName
             }
-            groups += g
             existingGroupNames += region.groupName
             createdRegions += region
         }
@@ -158,6 +174,8 @@ object ConfigBuilder {
             for (g in groups) {
                 val name = g["name"]?.toString() ?: continue
                 if (name == REGION_SELECTOR || !isSelect(g)) continue
+                // 分级地区的「·自动」选择组是地区选择的下级，加进去会形成环
+                if (name in tierSelectors) continue
                 val list = (g["proxies"] as? List<Any?>)?.map { it.toString() }?.toMutableList() ?: mutableListOf()
                 val canProxy = name == mainGroup || g["use"] != null || g["include-all"] == true || g["include-all-proxies"] == true ||
                     list.any { it.uppercase() !in nonProxy }
@@ -267,10 +285,30 @@ object ConfigBuilder {
 
         outFile.parentFile?.mkdirs()
         outFile.writeText(yaml().dump(cfg))
-        return BuildResult(outFile, mainGroup, createdRegions)
+        return BuildResult(outFile, mainGroup, createdRegions, tiered)
     }
 
     private fun isSelect(g: Map<String, Any?>) = g["type"]?.toString().equals("select", true)
+
+    private fun goEscape(s: String) = s.replace(Regex("[.*+?^\${}()|\\[\\]\\\\]")) { "\\" + it.value }
+
+    /** 一个按延迟自动选择的组。lazy：只有被用到时才定期测速，省流量省电 */
+    private fun urlTestGroup(name: String, nodes: List<String>, providers: List<String>, filter: String, exclude: String): LinkedHashMap<String, Any?> {
+        val g = LinkedHashMap<String, Any?>()
+        g["name"] = name
+        g["type"] = "url-test"
+        g["url"] = "https://www.gstatic.com/generate_204"
+        g["interval"] = URL_TEST_INTERVAL
+        g["tolerance"] = 50
+        g["lazy"] = true
+        if (nodes.isNotEmpty()) g["proxies"] = nodes
+        if (providers.isNotEmpty()) {
+            g["use"] = providers
+            g["filter"] = filter
+            g["exclude-filter"] = exclude
+        }
+        return g
+    }
 
     private fun defaultDns(ipv6: Boolean): Map<String, Any?> = linkedMapOf(
         "enable" to true,

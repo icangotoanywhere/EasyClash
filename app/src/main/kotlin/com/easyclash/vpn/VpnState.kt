@@ -41,14 +41,19 @@ object VpnState {
         private set
     @Volatile var regionGroups: List<Region> = emptyList()
         private set
+    /** 分了"优先/备用"两级的地区代码 */
+    @Volatile var tieredRegions: Set<String> = emptySet()
+        private set
     @Volatile var configPath: String = ""
         private set
+
+    fun isTiered(code: String?) = code != null && code in tieredRegions
 
     internal fun setStatus(s: Status) { _status.value = s; if (s == Status.CONNECTED) _startedAt.value = System.currentTimeMillis() }
     internal fun setError(msg: String?) { _error.value = msg }
     internal fun setTraffic(up: Long, down: Long) { _traffic.value = up to down }
-    internal fun setRuntime(api: CoreApi?, mainGroup: String, regions: List<Region>, configPath: String) {
-        this.api = api; this.mainGroup = mainGroup; this.regionGroups = regions; this.configPath = configPath
+    internal fun setRuntime(api: CoreApi?, mainGroup: String, regions: List<Region>, tiered: Set<String>, configPath: String) {
+        this.api = api; this.mainGroup = mainGroup; this.regionGroups = regions; this.tieredRegions = tiered; this.configPath = configPath
     }
     fun clearError() { _error.value = null }
 }

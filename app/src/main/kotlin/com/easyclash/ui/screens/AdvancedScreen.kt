@@ -120,6 +120,35 @@ fun AdvancedScreen(vm: MainViewModel) {
             ) { v -> vm.updateSettings { it.bingDirect = v } }
         }
 
+        // ================= 自动选节点 =================
+        var kw by remember(settings.backupKeyword) { mutableStateOf(settings.backupKeyword) }
+        var penalty by remember(settings.backupPenaltyMs) { mutableStateOf(settings.backupPenaltyMs.toString()) }
+        SectionCard(
+            title = "自动选节点：优先 / 备用",
+            help = "有些节点测延迟很快，真用起来却经常卡（典型的是经 CDN「中转」的节点：到 CDN 很近，但 CDN 再回机场源站那一段不稳）。纯按延迟挑，总是会选中它们。\n\n" +
+                "开启分级后，每个地区的「·自动」组会拆成两级：\n" +
+                "• 优先：名字不含关键字的节点，平时一律在这里面挑最快的\n" +
+                "• 备用：名字含关键字的节点\n\n" +
+                "每个测速周期（5 分钟）把两级都测一遍：只有当「优先」里最快的节点比「备用」里最快的还慢超过设定毫秒数时，才改用备用；优先节点恢复后自动切回。优先级全部超时也会自动用备用。\n\n" +
+                "关键字留空 = 不分级，纯按延迟选。如果你的机场「中转」节点质量很好，就把关键字清掉。",
+        ) {
+            HelpText("名字含关键字的节点降为备用，只在其他节点明显更慢时才用。", Modifier.padding(bottom = 4.dp))
+            OutlinedTextField(
+                value = kw, onValueChange = { kw = it.take(20) },
+                label = { Text("备用节点关键字（留空 = 不分级）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = penalty, onValueChange = { penalty = it.filter(Char::isDigit).take(4) },
+                label = { Text("优先比备用慢多少毫秒才用备用") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            HelpText("默认 100：优先节点 250ms、备用 100ms → 慢了 150ms，超过 100 → 用备用；优先 180ms、备用 100ms → 只慢 80ms → 仍用优先。")
+            TextButton(onClick = {
+                val p = penalty.toIntOrNull() ?: 100
+                vm.updateSettings { it.backupKeyword = kw.trim(); it.backupPenaltyMs = p.coerceIn(0, 5000) }
+            }) { Text("保存") }
+        }
+
         // ================= 附加规则 =================
         var rules by remember(settings.extraRules) { mutableStateOf(settings.extraRules) }
         SectionCard(

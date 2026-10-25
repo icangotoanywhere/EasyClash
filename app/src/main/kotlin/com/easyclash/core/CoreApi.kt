@@ -58,6 +58,9 @@ class CoreApi(private val port: Int, private val secret: String) {
         return out
     }
 
+    /** 单个代理 / 策略组 */
+    suspend fun proxy(name: String): ProxyItem? = runCatching { parseProxy(name, JSONObject(call(req("/proxies/${enc(name)}")))) }.getOrNull()
+
     private fun parseProxy(name: String, o: JSONObject): ProxyItem {
         val all = o.optJSONArray("all")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
         val hist = o.optJSONArray("history")

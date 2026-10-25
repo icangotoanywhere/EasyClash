@@ -16,6 +16,7 @@ import com.easyclash.R
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
 import com.easyclash.core.RegionLock
+import com.easyclash.core.TierPicker
 import com.easyclash.data.AppProxyMode
 import com.easyclash.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -56,10 +57,12 @@ class EasyClashVpnService : VpnService() {
 
     // 单线程调度：连接 / 重载 / 停止 串行执行，避免互相打架
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+    private val tierScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tun: ParcelFileDescriptor? = null
     private var trafficWs: WebSocket? = null
     private var logWs: WebSocket? = null
     private var secret = ""
+    private var tierJob: Job? = null
     // 连接后的后台维护（补下载规则集、更新地理数据库）。耗时较长，不能放进上面的单线程 scope，否则会挡住断开/重载
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var maintJob: Job? = null
@@ -130,11 +133,12 @@ class EasyClashVpnService : VpnService() {
                 VpnState.appendLog("[APP] 内核生效配置 tun=${o.optJSONObject("tun")} mode=${o.optString("mode")} mixed-port=${o.optInt("mixed-port")}")
             }
 
-            VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
+            VpnState.setRuntime(api, result.mainGroup, result.regionGroups, result.tieredRegions, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
             VpnState.setStatus(Status.CONNECTED)
             updateNotification("已连接 · ${sub.name}")
             startTrafficMonitor(api)
+            startTierPicker(api)
             startMaintenance(api)
         } catch (e: Throwable) {
             VpnState.appendLog("[APP] 启动失败：${e.message}")
@@ -200,6 +204,28 @@ class EasyClashVpnService : VpnService() {
         )
     }
 
+    /**
+     * "优先 / 备用"两级调度：锁定了某个地区且该地区分了级时，每隔一个测速周期
+     * 把两级节点都测一遍，按"优先比备用慢多少"决定走哪一级。只在锁定地区时运行，开销等于一次常规测速。
+     */
+    private fun startTierPicker(api: CoreApi) {
+        tierJob?.cancel()
+        tierJob = tierScope.launch {
+            delay(8_000)   // 等内核稳定、首批连接建立后再测
+            while (true) {
+                val settings = EasyClashApp.instance.store.settings.value
+                val code = settings.lockedRegion
+                val region = VpnState.regionGroups.firstOrNull { it.code == code }
+                if (region != null && VpnState.isTiered(code) && VpnState.api === api) {
+                    runCatching { TierPicker.run(api, region, settings.backupPenaltyMs) }
+                        .onSuccess { VpnState.appendLog("[APP] 分级选择 " + it.describe(region, settings.backupPenaltyMs)) }
+                        .onFailure { VpnState.appendLog("[APP] 分级选择失败：${it.message}") }
+                }
+                delay(ConfigBuilder.URL_TEST_INTERVAL * 1000L)
+            }
+        }
+    }
+
     // ---------------- 重载 ----------------
     private suspend fun reloadConfig() {
         val api = VpnState.api ?: return
@@ -213,9 +239,10 @@ class EasyClashVpnService : VpnService() {
             val out = File(store.runDir, "config.yaml")
             val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret)
             withContext(Dispatchers.IO) { core.Core.reload(out.absolutePath) }
-            VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
+            VpnState.setRuntime(api, result.mainGroup, result.regionGroups, result.tieredRegions, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
             updateNotification("已连接 · ${sub.name}")
+            startTierPicker(api)
             startMaintenance(api, checkGeo = false)
         } catch (e: Throwable) {
             VpnState.setError("重载配置失败：${friendly(e)}")
@@ -260,11 +287,12 @@ class EasyClashVpnService : VpnService() {
         VpnState.appendLog("[APP] 断开：$reason")
         VpnState.setStatus(Status.STOPPING)
         maintJob?.cancel(); maintJob = null
+        tierJob?.cancel(); tierJob = null
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null
         withContext(Dispatchers.IO) { runCatching { core.Core.stop() } }
         runCatching { tun?.close() }; tun = null
-        VpnState.setRuntime(null, "", emptyList(), "")
+        VpnState.setRuntime(null, "", emptyList(), emptySet(), "")
         VpnState.setTraffic(0, 0)
         VpnState.setStatus(Status.IDLE)
         // 不切到主线程：onDestroy 里用 runBlocking 调用本方法时主线程正被阻塞，切过去会死锁
@@ -279,6 +307,7 @@ class EasyClashVpnService : VpnService() {
         // 必须同步清理，否则系统销毁服务时内核会残留运行、TUN 泄漏
         if (VpnState.status.value != Status.IDLE) runBlocking { stopEverything("服务被系统销毁") }
         scope.cancel()
+        tierScope.cancel()
         bgScope.cancel()
         super.onDestroy()
     }
