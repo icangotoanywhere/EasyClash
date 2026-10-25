@@ -27,7 +27,7 @@ object TierPicker {
                 chosen == region.backupGroup -> "优先比备用慢 ${primaryMin - backupMin}ms，超过 ${penaltyMs}ms，改用备用"
                 else -> "优先没有比备用慢 ${penaltyMs}ms 以上，用优先"
             }
-            return "${region.flag} ${region.name}：优先 $p / 备用 $b → $why"
+            return "${region.flag} ${region.displayName}：优先 $p / 备用 $b → $why"
         }
     }
 
