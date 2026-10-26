@@ -1,6 +1,7 @@
-# 云端编译：push / 手动运行 → 产物在 Artifacts；推到 main → 按 build.gradle.kts 里的版本号自动打 tag、发布 Release 并附上 APK 与 Windows 版 zip
-# （推 v* 标签或在网页上 Publish release 也会把 APK 挂到对应 Release 上）
-name: Build APK
+# 云端编译：push / 手动运行 → 产物在 Artifacts；推到 main → 按 build.gradle.kts 里的版本号自动打 tag、发布 Release，
+# 附上安卓 APK、Windows 版 zip、macOS 版 dmg（macOS 版先在云端的 Mac 上自动测试，通过了才发布）
+# （推 v* 标签或在网页上 Publish release 也会把文件挂到对应 Release 上）
+name: Build
 
 on:
   push:
@@ -24,11 +25,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 仓库里还没有 windows/ 源码时整段跳过（不影响安卓版）
-      - name: Check Windows sources
+      # 仓库里没有 desktop/ 源码时整段跳过（不影响安卓版）
+      - name: Check desktop sources
         id: src
         run: |
-          if [ -f windows/go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::windows/ 目录不存在，跳过 Windows 版编译"; fi
+          if [ -f desktop/go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::desktop/ 目录不存在，跳过 Windows 版编译"; fi
 
       - uses: actions/setup-go@v5
         if: steps.src.outputs.present == 'true'
@@ -37,14 +38,15 @@ jobs:
       - name: Download geo databases (gzip, embedded into the exe)
         if: steps.src.outputs.present == 'true'
         run: |
-          mkdir -p windows/assets
+          mkdir -p desktop/assets
           for f in geoip.metadb geosite.dat GeoLite2-ASN.mmdb; do
             curl -fsSL -o "/tmp/$f" "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/$f"
-            gzip -9 -c "/tmp/$f" > "windows/assets/$f.gz"
+            gzip -9 -c "/tmp/$f" > "desktop/assets/$f.gz"
           done
-          ls -la windows/assets
+          ls -la desktop/assets
 
       - name: Build EasyClash.exe
+        id: build
         if: steps.src.outputs.present == 'true'
         env:
           GOFLAGS: -mod=mod
@@ -53,7 +55,7 @@ jobs:
           (
             set -ex
             ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
-            cd windows
+            cd desktop
             # go-winres 要在 Linux 上运行，必须用宿主平台安装（不能带 GOOS=windows）
             go install github.com/tc-hib/go-winres@v0.3.3
             "$(go env GOPATH)/bin/go-winres" make --in winres/winres.json --arch amd64 --product-version "$ver.0" --file-version "$ver.0"
@@ -72,15 +74,100 @@ jobs:
             exit 1
           fi
 
+      # 编译记录推到 ci-logs-windows 分支（只保留最近一次），不用登录也能用 git 拉下来看
+      - name: Push log to branch "ci-logs-windows"
+        if: always() && steps.src.outputs.present == 'true'
+        run: |
+          d=$(mktemp -d)
+          cp "$RUNNER_TEMP/win.log" "$d/build.log" 2>/dev/null || true
+          echo "source=${GITHUB_SHA} run=${GITHUB_RUN_ID} ref=${GITHUB_REF_NAME} build=${{ steps.build.outcome }}" > "$d/info.txt"
+          cd "$d"
+          git init -q -b ci-logs-windows
+          git -c user.name=github-actions -c user.email=actions@github.com add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "Windows CI ${GITHUB_SHA::7}: build=${{ steps.build.outcome }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-windows:ci-logs-windows
+
       - uses: actions/upload-artifact@v4
         if: steps.src.outputs.present == 'true'
         with:
           name: easyclash-windows
           path: EasyClash-Windows-*.zip
 
+  # ---------- macOS 版：在云端的 Mac 上编译（菜单栏要用 Cocoa，必须开 CGO），打包成 .app 和 dmg，再自动测试 ----------
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check desktop sources
+        id: src
+        run: |
+          if [ -f desktop/build-macos.sh ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::没有 macOS 版源码，跳过"; fi
+
+      # 固定 Go 1.26：它最低支持 macOS 12（Info.plist 里写的最低系统版本）
+      - uses: actions/setup-go@v5
+        if: steps.src.outputs.present == 'true'
+        with: { go-version: '1.26.x', cache: false }
+
+      - name: Build EasyClash.app and dmg
+        id: build
+        if: steps.src.outputs.present == 'true'
+        run: |
+          (
+            set -ex
+            ver=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | cut -d'"' -f2)
+            sw_vers
+            cd desktop
+            bash build-macos.sh "$ver"
+          ) > "$RUNNER_TEMP/mac.log" 2>&1 && ok=1 || ok=0
+          cat "$RUNNER_TEMP/mac.log"
+          if [ "$ok" != 1 ]; then
+            echo "::error title=macOS 版编译失败::$(tail -n 40 "$RUNNER_TEMP/mac.log" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN{ORS="%0A"}{print}')"
+            exit 1
+          fi
+
+      # 启动、导入订阅、连接、检查系统代理确实指向本软件并能上网、断开后恢复原设置、强制结束后再启动能恢复、
+      # 单实例、菜单栏模式、再次打开、clash:// 链接、退出时恢复……全部走一遍
+      - name: Test on macOS
+        id: test
+        if: steps.build.outcome == 'success'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mac-test"
+          cd desktop
+          bash macos/ci-test.sh dist/EasyClash.app "$RUNNER_TEMP/mac-test" 2>&1 | tee "$RUNNER_TEMP/mac-test/test.txt"
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" != 0 ]; then
+            echo "::error title=macOS 版测试失败::$(grep '^FAIL' "$RUNNER_TEMP/mac-test/test.txt" | head -n 30 | sed -e 's/%/%25/g' | awk 'BEGIN{ORS="%0A"}{print}')"
+            exit 1
+          fi
+
+      # 编译和测试的完整记录推到 ci-logs-macos 分支（只保留最近一次），不用登录也能用 git 拉下来看
+      - name: Push logs to branch "ci-logs-macos"
+        if: always() && steps.src.outputs.present == 'true'
+        run: |
+          d=$(mktemp -d)
+          cp "$RUNNER_TEMP/mac.log" "$d/build.log" 2>/dev/null || true
+          cp -R "$RUNNER_TEMP/mac-test" "$d/test" 2>/dev/null || true
+          echo "source=${GITHUB_SHA} run=${GITHUB_RUN_ID} ref=${GITHUB_REF_NAME} build=${{ steps.build.outcome }} test=${{ steps.test.outcome }}" > "$d/info.txt"
+          cd "$d"
+          git init -q -b ci-logs-macos
+          git -c user.name=github-actions -c user.email=actions@github.com add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "macOS CI ${GITHUB_SHA::7}: build=${{ steps.build.outcome }} test=${{ steps.test.outcome }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-logs-macos:ci-logs-macos
+
+      - name: Collect dmg
+        if: steps.test.outcome == 'success'
+        run: cp desktop/dist/EasyClash-macOS-v*.dmg .
+
+      - uses: actions/upload-artifact@v4
+        if: steps.test.outcome == 'success'
+        with:
+          name: easyclash-macos
+          path: EasyClash-macOS-v*.dmg
+
+  # ---------- 安卓版 ----------
   build:
     runs-on: ubuntu-latest
-    needs: windows
     steps:
       - uses: actions/checkout@v4
 
@@ -155,22 +242,40 @@ jobs:
           git -c user.name=github-actions -c user.email=actions@github.com commit -qm "EasyClash $ver APK（源码 ${GITHUB_SHA::7}）"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk:apk
 
-      # 推到 main：版本号来自 build.gradle.kts 的 versionName。标签不存在就创建并发布 Release；已存在则只更新该 Release 的 APK
+  # ---------- 发布：三个平台都编译成功（macOS 版还要通过自动测试）才发布，保证 README 里三个"最新版"直链总是同一个版本 ----------
+  release:
+    runs-on: ubuntu-latest
+    needs: [windows, macos, build]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
-        continue-on-error: true   # 没有 Windows 版产物（仓库里还没有 windows/ 源码）时不影响发布
+        with:
+          name: easyclash-apk
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: easyclash-windows
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: easyclash-macos
+
+      # 推到 main：版本号来自 build.gradle.kts 的 versionName。标签不存在就创建并发布 Release；已存在则更新该 Release 的文件
       - name: Read version
-        if: github.ref == 'refs/heads/main'
         id: ver
         run: |
           ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           echo "tag=v$ver" >> "$GITHUB_OUTPUT"
-          cp app/build/outputs/apk/release/app-release.apk "EasyClash-v$ver.apk"
-          # 再各放一份固定文件名的副本，README 里的直链 releases/latest/download/EasyClash.apk 才能永远指向最新版
+          [ -f "EasyClash-v$ver.apk" ] || cp "EasyClash-${GITHUB_REF_NAME}.apk" "EasyClash-v$ver.apk"
+          # 再各放一份固定文件名的副本，README 里的直链 releases/latest/download/EasyClash.apk 等才能永远指向最新版
           cp "EasyClash-v$ver.apk" EasyClash.apk
-          ls EasyClash-Windows-v*.zip >/dev/null 2>&1 && cp "EasyClash-Windows-v$ver.zip" EasyClash-Windows.zip || true
+          [ -f "EasyClash-Windows-v$ver.zip" ] && cp "EasyClash-Windows-v$ver.zip" EasyClash-Windows.zip || echo "::warning::本次没有 Windows 版"
+          [ -f "EasyClash-macOS-v$ver.dmg" ] && cp "EasyClash-macOS-v$ver.dmg" EasyClash-macOS.dmg || echo "::warning::本次没有 macOS 版"
+          ls -la
           # 取本次推送里的提交说明作为发布说明（第一行是标题，去掉署名行）
           git log -1 --format=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > "$RUNNER_TEMP/notes.md" || true
 
@@ -185,16 +290,19 @@ jobs:
           files: |
             EasyClash-v*.apk
             EasyClash-Windows-*.zip
+            EasyClash-macOS-*.dmg
             EasyClash.apk
             EasyClash-Windows.zip
+            EasyClash-macOS.dmg
           make_latest: true
 
-      # 推 v* 标签，或在网页上 Publish release，都会把 APK 挂到对应 Release 上
-      - name: Attach APK to Release (tag / web release)
+      # 推 v* 标签，或在网页上 Publish release，都会把文件挂到对应 Release 上
+      - name: Attach files to Release (tag / web release)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            EasyClash-*.apk
+            EasyClash-v*.apk
             EasyClash-Windows-*.zip
+            EasyClash-macOS-*.dmg
           generate_release_notes: true

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>EasyClash</string>
+	<key>CFBundleDisplayName</key>
+	<string>EasyClash</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.easyclash.desktop</string>
+	<key>CFBundleExecutable</key>
+	<string>EasyClash</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>__VERSION__</string>
+	<key>CFBundleVersion</key>
+	<string>__VERSION__</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<!-- 只在菜单栏显示，没有 Dock 图标 -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<!-- 网页上的 clash:// 一键导入链接交给本软件打开 -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.easyclash.desktop.subscription</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>clash</string>
+				<string>clashmeta</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSHumanReadableCopyright</key>
+	<string>GPL-3.0 · 本应用仅支持科研用途</string>
+</dict>
+</plist>

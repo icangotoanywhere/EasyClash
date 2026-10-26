@@ -3,14 +3,15 @@
 > [!WARNING]
 > **声明：本应用仅支持科研用途，任何人不得借助本应用提供的便利浏览非法内容、发表非法言论，否则后果自负！**
 
-一个极简的安卓 Clash（mihomo 内核）客户端：**只做必要的事，每个按钮旁边都有一句人话说明。**
+一个极简的 Clash（mihomo 内核）客户端，安卓、Windows、macOS 都有：**只做必要的事，每个按钮旁边都有一句人话说明。**
 
 | 平台 | 下载 | 说明 |
 |---|---|---|
 | 安卓 | [⬇️ EasyClash.apk](../../releases/latest/download/EasyClash.apk) | arm64，安卓 8.0 以上；装不上请先允许"未知来源" |
 | Windows | [⬇️ EasyClash-Windows.zip](../../releases/latest/download/EasyClash-Windows.zip) | 解压后双击 `EasyClash.exe`，免安装，Windows 10 以上 |
+| macOS | [⬇️ EasyClash-macOS.dmg](../../releases/latest/download/EasyClash-macOS.dmg) | Intel 和 M 系列芯片通用，macOS 12 以上；第一次打开要在「隐私与安全性」里点「仍要打开」，见[说明](desktop/README.md#macos-第一次打开) |
 
-以上两个链接永远指向最新版本；历史版本见 [Releases](../../releases)。所有文件由 GitHub Actions 在云端自动编译。
+以上链接永远指向最新版本；历史版本见 [Releases](../../releases)。所有文件由 GitHub Actions 在云端自动编译。
 
 ## 为什么又做一个 Clash 客户端
 
@@ -46,9 +47,14 @@
 - **规则**：订阅自带的分流规则原样使用；订阅引用的在线规则集（Netflix、ChatGPT、广告拦截、国内网站列表等）由内核自动下载、定期更新，并且**固定经代理下载**——这些规则集大多放在国外网站上，直连常常下载失败、规则集等于没有。订阅没带规则时，自动补一套基础分流（局域网、国内网站、国内 IP 直连，其余走代理）。
 - **地理数据库**：GeoIP（IP 归属国家）、GeoSite（网站分类）、ASN（IP 所属运营商）已打包在安装包里，和其他 Clash 客户端里的 GeoIP 功能是同一套东西。默认每 7 天自动检查更新（只更新当前规则用得到的），也可在「高级」页手动更新。
 
-## Windows 版
+## 电脑版（Windows / macOS）
 
-同一套思路的桌面版，源码在 `windows/`：纯 Go + WebView2 界面，系统代理或 TUN 模式，托盘常驻，分程序代理，其余功能（锁定出口地区、优先/备用分级、QUIC 拦截、必应国内版……）与安卓版一致。每次发布的 Release 里附有 `EasyClash-Windows-vX.Y.Z.zip`；自己编译运行 `windows\build-windows.ps1` 即可。
+同一套思路的电脑版，两个平台共用 `desktop/` 里的一份 Go 源码，功能（锁定出口地区、优先/备用分级、分程序代理、必应国内版……）与安卓版一致：
+
+- **Windows**：独立窗口（WebView2），系统代理或 TUN 模式，托盘常驻。
+- **macOS**：常驻顶部菜单栏，控制面板在浏览器里打开，系统代理模式。每个版本发布前都会在 GitHub 的云端 Mac 上自动测试一遍（连接、系统代理、断开恢复、异常退出恢复、`clash://` 链接等）。
+
+详见 [desktop/README.md](desktop/README.md)。自己编译：Windows 运行 `desktop\build-windows.ps1`，macOS 运行 `desktop/build-macos.sh`。
 
 ## 技术说明
 
@@ -67,7 +73,7 @@
 
 ### GitHub Actions
 
-Fork 后在 Actions 里手动运行 **Build APK**，产物在 Artifacts。
+Fork 后在 Actions 里手动运行 **Build**，产物（APK、Windows zip、macOS dmg）在 Artifacts。
 
 ### 要点
 
