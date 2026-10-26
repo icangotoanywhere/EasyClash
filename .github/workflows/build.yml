@@ -168,6 +168,9 @@ jobs:
           ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           echo "tag=v$ver" >> "$GITHUB_OUTPUT"
           cp app/build/outputs/apk/release/app-release.apk "EasyClash-v$ver.apk"
+          # 再各放一份固定文件名的副本，README 里的直链 releases/latest/download/EasyClash.apk 才能永远指向最新版
+          cp "EasyClash-v$ver.apk" EasyClash.apk
+          ls EasyClash-Windows-v*.zip >/dev/null 2>&1 && cp "EasyClash-Windows-v$ver.zip" EasyClash-Windows.zip || true
           # 取本次推送里的提交说明作为发布说明（第一行是标题，去掉署名行）
           git log -1 --format=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > "$RUNNER_TEMP/notes.md" || true
 
@@ -182,6 +185,8 @@ jobs:
           files: |
             EasyClash-v*.apk
             EasyClash-Windows-*.zip
+            EasyClash.apk
+            EasyClash-Windows.zip
           make_latest: true
 
       # 推 v* 标签，或在网页上 Publish release，都会把 APK 挂到对应 Release 上

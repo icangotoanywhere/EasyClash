@@ -5,7 +5,12 @@
 
 一个极简的安卓 Clash（mihomo 内核）客户端：**只做必要的事，每个按钮旁边都有一句人话说明。**
 
-[⬇️ 下载最新版本](../../releases/latest)：安卓 APK（arm64，安卓 8.0 以上；装不上请先允许"未知来源"）和 Windows 版 zip（解压后双击 `EasyClash.exe`，免安装，Windows 10 以上）。两者由 GitHub Actions 在云端自动编译。
+| 平台 | 下载 | 说明 |
+|---|---|---|
+| 安卓 | [⬇️ EasyClash.apk](../../releases/latest/download/EasyClash.apk) | arm64，安卓 8.0 以上；装不上请先允许"未知来源" |
+| Windows | [⬇️ EasyClash-Windows.zip](../../releases/latest/download/EasyClash-Windows.zip) | 解压后双击 `EasyClash.exe`，免安装，Windows 10 以上 |
+
+以上两个链接永远指向最新版本；历史版本见 [Releases](../../releases)。所有文件由 GitHub Actions 在云端自动编译。
 
 ## 为什么又做一个 Clash 客户端
 
