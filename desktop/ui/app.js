@@ -657,9 +657,10 @@ const APP_MODES = [
 function pageApps() {
   const set = S.st.settings;
   const out = [card('分程序代理',
-    '控制哪些程序的流量经过代理，按程序文件名（如 ' + P('chrome.exe', 'Google Chrome') + '）区分。\n\n' +
+    '控制哪些程序的流量经过代理，按程序文件名（如 ' + P('chrome.exe', 'WeChat') + '）区分。\n\n' +
     APP_MODES.map((m) => `「${m[1]}」：${m[2]}`).join('\n\n') +
     '\n\n改动立即生效，不用重新连接。\n\n' +
+    (MAC() ? 'Mac 上很多程序由"辅助进程"负责联网：Chrome 要选「Google Chrome Helper」，Safari 要选「com.apple.WebKit.Networking」（勾选下面的「显示系统进程」才看得到）。\n\n' : '') +
     '注意：系统代理模式下，只有遵守系统代理设置的程序（浏览器和大多数软件）会经过本软件，不认系统代理的程序本来就直连' +
     (S.st.tunSupported ? '；想让所有程序都受控，请在「高级」页开启 TUN 模式。' : '。'),
     helpText('选择哪些程序走代理。改动立即生效。', 'mb8'),
@@ -858,7 +859,7 @@ function pageAdvanced() {
     'IP-CIDR,8.8.8.0/24,DIRECT          IP 段\n' +
     'GEOIP,CN,DIRECT                    按 IP 所属国家\n' +
     'GEOSITE,cn,DIRECT                  按网站分类（内置数据库）\n' +
-    'PROCESS-NAME,' + P('chrome.exe', 'Google Chrome') + ',DIRECT     按程序名\n\n' +
+    'PROCESS-NAME,' + P('chrome.exe', 'WeChat') + ',DIRECT     按程序名\n\n' +
     '去向可以是 DIRECT（直连）、REJECT（拒绝）或你订阅里任何一个策略组的名字。\n\n' +
     '以 # 开头的行是注释，会被忽略。',
     helpText('想让某个网站强制直连/走代理，在这里加一行。', 'mb8'), rules,

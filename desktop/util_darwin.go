@@ -20,6 +20,9 @@ import (
 // 先用系统代理（浏览器和绝大多数软件都遵守）。
 const tunSupported = false
 
+// logEOL 日志文件的换行符
+const logEOL = "\n"
+
 func isAdmin() bool { return os.Geteuid() == 0 }
 
 func relaunch(elevated bool, args string) error {

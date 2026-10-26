@@ -92,7 +92,7 @@ func appendLog(line string) {
 	}
 	logSeq++
 	if logFile != nil {
-		n, _ := logFile.WriteString(now.Format("2006-01-02 15:04:05 ") + line + "\r\n")
+		n, _ := logFile.WriteString(now.Format("2006-01-02 15:04:05 ") + line + logEOL)
 		logFileLen += int64(n)
 		if logFileLen > maxLogFileLen {
 			logFile.Close()

@@ -238,6 +238,9 @@ func systemProxyNow() string {
 // tunSupported Windows 版支持 TUN 虚拟网卡模式（需要以管理员身份运行）
 const tunSupported = true
 
+// logEOL 日志文件的换行符（记事本要 \r\n）
+const logEOL = "\r\n"
+
 func isAdmin() bool { return windows.GetCurrentProcessToken().IsElevated() }
 
 // relaunch 用 ShellExecute 重新启动自己；elevated=true 时弹 UAC 请求管理员权限
