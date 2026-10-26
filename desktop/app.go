@@ -323,7 +323,7 @@ func (a *App) doConnect() error {
 	}
 	extractGeoFiles(a.store.HomeDir())
 
-	tun := st.TunMode
+	tun := st.TunMode && tunSupported // Mac 版暂不支持 TUN，始终用系统代理
 	if tun && !isAdmin() {
 		return errors.New("TUN 模式需要管理员权限：请到「高级」页点「以管理员身份重新启动」，或关掉 TUN 模式改用系统代理")
 	}
@@ -397,7 +397,7 @@ func (a *App) doConnect() error {
 
 var nonProxyTypes = map[string]bool{"direct": true, "reject": true, "rejectdrop": true, "pass": true, "compatible": true}
 
-func isGroupItem(p ProxyItem) bool { return len(p.All) > 0 }
+func isGroupItem(p ProxyItem) bool    { return len(p.All) > 0 }
 func isSelectorItem(p ProxyItem) bool { return strings.EqualFold(p.Type, "Selector") }
 
 // leadsToProxy 沿着策略组走到底，最终是不是一个真正的代理节点
@@ -617,7 +617,7 @@ func (a *App) doReload() error {
 	if err != nil {
 		return errors.New("订阅文件不存在，请先更新一次订阅")
 	}
-	tun := st.TunMode
+	tun := st.TunMode && tunSupported // Mac 版暂不支持 TUN，始终用系统代理
 	if tun && !isAdmin() {
 		tun = false
 		a.setError("TUN 模式需要管理员权限，暂时仍用系统代理：请到「高级」页点「以管理员身份重新启动」")

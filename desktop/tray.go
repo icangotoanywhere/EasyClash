@@ -6,19 +6,23 @@ import (
 	"fyne.io/systray"
 )
 
-// 托盘：单击打开窗口；右键菜单可连接 / 断开 / 切换出站模式 / 退出
+// 托盘（Windows 右下角 / macOS 顶部菜单栏）：菜单里可连接 / 断开 / 切换出站模式 / 打开界面 / 退出。
+// 图标、点击行为等平台差异见 tray_windows.go / tray_darwin.go
 
-func runTray(app *App, ui *UI) {
+// onExit：macOS 上「退出」时系统直接结束进程，清理工作（断开、恢复系统代理）必须放在这里做
+func runTray(app *App, ui *UI, onExit func()) {
 	runtime.LockOSThread() // 托盘窗口和它的消息循环必须在同一个系统线程
-	systray.Run(func() { trayReady(app, ui) }, func() {})
+	systray.Run(func() { trayReady(app, ui) }, onExit)
 }
 
 func stopTray() { systray.Quit() }
 
 func trayReady(app *App, ui *UI) {
-	systray.SetIcon(trayIconOff)
+	setTrayIcon(false)
 	systray.SetTooltip("EasyClash：未连接")
-	systray.SetOnTapped(func() { ui.Show() })
+	if trayClickOpensUI {
+		systray.SetOnTapped(func() { ui.Show() })
+	}
 
 	mStatus := systray.AddMenuItem("EasyClash · 未连接", "")
 	mStatus.Disable()
@@ -28,7 +32,7 @@ func trayReady(app *App, ui *UI) {
 	mRule := mMode.AddSubMenuItemCheckbox("规则（国内直连、国外走代理）", "", false)
 	mGlobal := mMode.AddSubMenuItemCheckbox("全局（全部走代理）", "", false)
 	mDirect := mMode.AddSubMenuItemCheckbox("直连（全部不走代理）", "", false)
-	mShow := systray.AddMenuItem("显示主界面", "")
+	mShow := systray.AddMenuItem(trayShowLabel, "")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("退出 EasyClash", "断开代理、恢复系统代理设置并退出")
 
@@ -41,7 +45,7 @@ func trayReady(app *App, ui *UI) {
 		tun := app.tunOn
 		app.mu.Unlock()
 		if status == stConnected {
-			systray.SetIcon(trayIconOn)
+			setTrayIcon(true)
 			how := "系统代理"
 			if tun {
 				how = "TUN"
@@ -56,7 +60,7 @@ func trayReady(app *App, ui *UI) {
 			}
 			mToggle.SetTitle("断开")
 		} else {
-			systray.SetIcon(trayIconOff)
+			setTrayIcon(false)
 			systray.SetTooltip("EasyClash：" + label)
 			mToggle.SetTitle("连接")
 		}

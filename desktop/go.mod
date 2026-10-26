@@ -1,4 +1,4 @@
-module easyclash/windows
+module easyclash/desktop
 
 go 1.26.0
 

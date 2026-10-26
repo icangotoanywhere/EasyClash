@@ -1,0 +1,7 @@
+assets/*.gz
+EasyClash.exe
+rsrc_windows_*.syso
+# macOS 编译产物
+EasyClash.app/
+dist/
+*.dmg

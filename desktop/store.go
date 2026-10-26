@@ -45,8 +45,8 @@ type Settings struct {
 	BackupKeyword      string   `json:"backupKeyword"`   // 名字含此关键字的节点视为备用（如经 CDN 中转的节点）；空 = 不分级
 	BackupPenaltyMs    int      `json:"backupPenaltyMs"` // 优先节点比备用慢超过这么多毫秒才改用备用
 	TestIntervalMin    int      `json:"testIntervalMin"` // 自动测速 / 自动选节点的周期（分钟）
-	AutoStart          bool     `json:"autoStart"`   // 开机自动启动
-	AutoConnect        bool     `json:"autoConnect"` // 启动后自动连接
+	AutoStart          bool     `json:"autoStart"`       // 开机自动启动
+	AutoConnect        bool     `json:"autoConnect"`     // 启动后自动连接
 	GeoAutoUpdate      bool     `json:"geoAutoUpdate"`
 	GeoLastCheck       int64    `json:"geoLastCheck"`
 	GeoLastAttempt     int64    `json:"geoLastAttempt"`

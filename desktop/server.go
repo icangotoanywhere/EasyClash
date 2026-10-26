@@ -11,12 +11,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// 界面是一个本地网页（WebView2 窗口里打开），通过这里的接口操作。
+// 界面是一个本地网页（Windows：WebView2 窗口里打开；macOS：浏览器里打开），通过这里的接口操作。
 // 所有 /api/ 与 /core/ 请求都要带启动时随机生成的令牌，防止本机其他程序乱调。
 
 type Server struct {
@@ -128,6 +129,8 @@ func (s *Server) state() map[string]any {
 		}
 	}
 	st["version"] = appVersion
+	st["platform"] = runtime.GOOS // "windows" / "darwin"：界面据此切换说明文字
+	st["tunSupported"] = tunSupported
 	st["coreVersion"] = coreVersion()
 	st["settings"] = a.store.Settings()
 	subs := a.store.Subs()

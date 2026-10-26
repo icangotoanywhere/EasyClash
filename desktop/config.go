@@ -21,7 +21,6 @@ const (
 	regionSelector    = "🌍 地区选择"
 	fallbackMainGroup = "🚀 节点选择"
 	geoMirrorHost     = "testingcf.jsdelivr.net"
-
 )
 
 // 订阅没带分流规则时补上的基础分流

@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 import (
@@ -8,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -147,8 +148,6 @@ func readBackup(dataDir string) *proxyBackup {
 	return &bk
 }
 
-func ourProxyServer(port int) string { return "127.0.0.1:" + itoa(port) }
-
 // enableSystemProxy 把系统代理指向 127.0.0.1:port。第一次开启前先备份用户原来的设置（比如别的代理软件的端口）。
 func enableSystemProxy(dataDir string, port int) error {
 	bk := readBackup(dataDir)
@@ -234,19 +233,12 @@ func systemProxyNow() string {
 	return cur.Server
 }
 
-func itoa(n int) string { return strconv.Itoa(n) }
-
 // ======================= 管理员 / 重新启动 =======================
 
-func isAdmin() bool { return windows.GetCurrentProcessToken().IsElevated() }
+// tunSupported Windows 版支持 TUN 虚拟网卡模式（需要以管理员身份运行）
+const tunSupported = true
 
-func exePath() string {
-	p, err := os.Executable()
-	if err != nil {
-		return os.Args[0]
-	}
-	return p
-}
+func isAdmin() bool { return windows.GetCurrentProcessToken().IsElevated() }
 
 // relaunch 用 ShellExecute 重新启动自己；elevated=true 时弹 UAC 请求管理员权限
 func relaunch(elevated bool, args string) error {
@@ -314,12 +306,6 @@ func registerURLProtocol(force bool) {
 }
 
 // ======================= 进程列表（分程序代理用） =======================
-
-type ProcInfo struct {
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	System bool   `json:"system"`
-}
 
 func listProcesses() []ProcInfo {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)

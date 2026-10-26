@@ -1,8 +1,11 @@
 'use strict';
-// EasyClash Windows 版界面。和安卓版的五个页面一一对应，每个设置项都有一行说明，ⓘ 弹出详细解释。
+// EasyClash 桌面版界面（Windows：WebView2 窗口；macOS：浏览器）。和安卓版的五个页面一一对应，每个设置项都有一行说明，ⓘ 弹出详细解释。
 
 const TOKEN = decodeURIComponent(location.hash.slice(1));
 const $ = (s) => document.querySelector(s);
+// 平台：后台在 /api/state 里告诉界面是 windows 还是 darwin（macOS），说明文字据此切换
+const MAC = () => !!(S.st && S.st.platform === 'darwin');
+const P = (win, mac) => (MAC() ? mac : win);
 
 const S = {
   st: null,            // 后台状态 /api/state
@@ -306,7 +309,7 @@ function render(force) {
   S.pendingRender = false;
   const scroll = root.scrollTop;
   const page = h('div', { class: 'page' });
-  if (S.offline) page.append(card('后台无响应', null, helpText('界面暂时连不上 EasyClash 后台，正在重试…（如果一直这样，请从托盘退出后重新打开软件）', 'err')));
+  if (S.offline) page.append(card('后台无响应', null, helpText('界面暂时连不上 EasyClash 后台，正在重试…（如果一直这样，请从' + P('托盘', '菜单栏') + '退出后重新打开软件）', 'err')));
   if (!S.st) { root.replaceChildren(page); return; }
   const pages = { home: pageHome, subs: pageSubs, nodes: pageNodes, apps: pageApps, advanced: pageAdvanced };
   page.append(...[].concat((pages[S.page] || pageHome)()));
@@ -334,9 +337,10 @@ function pageHome() {
   else if (st.status === 'connected') action = btn('断开', () => act('disconnect', {}), 'danger');
   else action = h('div', { class: 'spinner' });
   const conn = card('连接',
-    '点「连接」后，本软件在后台启动代理内核，并把 Windows 的系统代理指向它：浏览器和大多数软件会自动经过本软件，再按下面的规则决定走代理还是直连。\n\n' +
-    '想让所有程序（包括不认系统代理的游戏、命令行工具）都受控，可以到「高级」页开启 TUN 模式。\n\n' +
-    '断开或退出时会自动恢复原来的系统代理设置。关闭窗口不会断开，软件继续在屏幕右下角的托盘里运行。',
+    '点「连接」后，本软件在后台启动代理内核，并把 ' + P('Windows', 'Mac') + ' 的系统代理指向它：浏览器和大多数软件会自动经过本软件，再按下面的规则决定走代理还是直连。\n\n' +
+    (st.tunSupported ? '想让所有程序（包括不认系统代理的游戏、命令行工具）都受控，可以到「高级」页开启 TUN 模式。\n\n' : '') +
+    '断开或退出时会自动恢复原来的系统代理设置。' +
+    P('关闭窗口不会断开，软件继续在屏幕右下角的托盘里运行。', '关掉浏览器标签页不会断开，EasyClash 继续在屏幕顶部的菜单栏里运行。'),
     h('div', { class: 'row mt8' },
       h('div', { class: 'grow' }, h('div', { class: 'big' }, statusText), helpText(sel ? '当前订阅：' + sel.name : '还没有订阅，请到「订阅」页添加')),
       action));
@@ -423,8 +427,9 @@ function pageHome() {
     helpText('• 第一次使用：订阅页添加机场链接 → 回到首页点连接。'),
     helpText('• 某个程序不想走代理（比如网银、国内视频、游戏）：到「程序」页排除它。'),
     helpText('• 网页打不开但全局模式能打开：说明被分到了直连，可到「高级」页加一条规则。'),
-    helpText('• 有的程序不认系统代理（部分游戏、命令行工具）：到「高级」页开启 TUN 模式。'),
-    helpText('• 关闭窗口不会退出，软件在右下角托盘继续运行；右键托盘图标可以断开或退出。'),
+    st.tunSupported ? helpText('• 有的程序不认系统代理（部分游戏、命令行工具）：到「高级」页开启 TUN 模式。') : null,
+    helpText(P('• 关闭窗口不会退出，软件在右下角托盘继续运行；右键托盘图标可以断开或退出。',
+      '• 关掉这个浏览器标签页不影响代理；EasyClash 常驻在屏幕顶部菜单栏（双环图标），点它可以连接 / 断开 / 重新打开控制面板 / 退出。')),
     helpText('• 看不懂的选项，点旁边的 ⓘ 都有解释。')));
   return out;
 }
@@ -652,10 +657,11 @@ const APP_MODES = [
 function pageApps() {
   const set = S.st.settings;
   const out = [card('分程序代理',
-    '控制哪些程序的流量经过代理，按程序文件名（如 chrome.exe）区分。\n\n' +
+    '控制哪些程序的流量经过代理，按程序文件名（如 ' + P('chrome.exe', 'Google Chrome') + '）区分。\n\n' +
     APP_MODES.map((m) => `「${m[1]}」：${m[2]}`).join('\n\n') +
     '\n\n改动立即生效，不用重新连接。\n\n' +
-    '注意：系统代理模式下，只有遵守系统代理设置的程序（浏览器和大多数软件）会经过本软件，不认系统代理的程序本来就直连；想让所有程序都受控，请在「高级」页开启 TUN 模式。',
+    '注意：系统代理模式下，只有遵守系统代理设置的程序（浏览器和大多数软件）会经过本软件，不认系统代理的程序本来就直连' +
+    (S.st.tunSupported ? '；想让所有程序都受控，请在「高级」页开启 TUN 模式。' : '。'),
     helpText('选择哪些程序走代理。改动立即生效。', 'mb8'),
     APP_MODES.map((m) => h('label', { class: 'radio' },
       h('input', { type: 'radio', name: 'appmode', checked: set.appProxyMode === m[0], onchange: () => setSetting({ appProxyMode: m[0] }) }),
@@ -668,11 +674,11 @@ function pageApps() {
     if (on) list.push(name);
     setSetting({ appList: list });
   };
-  const manual = h('input', { type: 'text', placeholder: '手动添加程序名，例如 WeChat.exe' });
+  const manual = h('input', { type: 'text', placeholder: '手动添加程序名，例如 ' + P('WeChat.exe', 'WeChat') });
   const addManual = () => {
     let v = manual.value.trim();
     if (!v) return;
-    if (!/\.exe$/i.test(v)) v += '.exe';
+    if (!MAC() && !/\.exe$/i.test(v)) v += '.exe';
     manual.value = '';
     toggle(v, true);
   };
@@ -730,12 +736,21 @@ const RULES_HELP =
 const GEO_AUTO_HELP =
   '开启后，每次连接成功会检查数据库是否超过 7 天没更新；超过就在后台经代理下载最新版（GeoIP 约 8 MB），不影响正常上网。内容没变化时不会重复写入。下载失败会在 12 小时后再试。\n\n' +
   '关掉后数据库保持现状，仍可随时点「立即更新数据库」手动更新。';
-const PRESET_RULES = `# Windows 更新、微软商店下载直连（国内有节点，直连更快）
+const PRESET_RULES_WIN = `# Windows 更新、微软商店下载直连（国内有节点，直连更快）
 DOMAIN-SUFFIX,windowsupdate.com,DIRECT
 DOMAIN-SUFFIX,delivery.mp.microsoft.com,DIRECT
 # 局域网直连
 IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
 IP-CIDR,10.0.0.0/8,DIRECT,no-resolve`;
+const PRESET_RULES_MAC = `# macOS 系统更新、App Store 下载直连（国内有节点，直连更快）
+DOMAIN-SUFFIX,swcdn.apple.com,DIRECT
+DOMAIN-SUFFIX,swdist.apple.com,DIRECT
+DOMAIN-SUFFIX,updates.cdn-apple.com,DIRECT
+DOMAIN-SUFFIX,osxapps.itunes.apple.com,DIRECT
+# 局域网直连
+IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+IP-CIDR,10.0.0.0/8,DIRECT,no-resolve`;
+const presetRules = () => P(PRESET_RULES_WIN, PRESET_RULES_MAC);
 const TUN_STACKS = [
   ['gvisor', 'gvisor（兼容性最好，默认）'],
   ['mixed', 'mixed（TCP 用系统栈，速度更快）'],
@@ -749,7 +764,12 @@ function pageAdvanced() {
   const out = [rulesCard()];
 
   // ---- 接管方式 ----
-  const how = card('接管方式',
+  const how = !st.tunSupported ? card('接管方式',
+    '「系统代理」：把这台 Mac 每个网络（Wi-Fi、以太网等）的网页代理、安全网页代理和 SOCKS 代理都设成 127.0.0.1:端口（就是「系统设置 → 网络 → 详细信息 → 代理」那一页）。浏览器和绝大多数软件会自动遵守。断开或退出时自动恢复原来的设置。\n\n' +
+    '修改系统代理需要当前登录的是管理员账户（一般个人 Mac 都是）。\n\n' +
+    '少数不认系统代理的命令行工具，可以在终端里先执行：\nexport https_proxy=http://127.0.0.1:' + set.mixedPort + ' http_proxy=http://127.0.0.1:' + set.mixedPort + '\n\n' +
+    'Mac 版暂不提供 TUN 虚拟网卡模式。',
+    helpText('Mac 版通过系统代理接管：浏览器和绝大多数软件都会走本软件。', 'mb8')) : card('接管方式',
     '决定哪些程序的流量会经过本软件。\n\n' +
     '「系统代理」（默认）：把 Windows 的系统代理设成 127.0.0.1:端口。浏览器和大多数软件会自动遵守，不需要管理员权限。断开或退出时自动恢复原来的设置。\n\n' +
     '「TUN 虚拟网卡」：创建一块虚拟网卡接管整台电脑的流量，所有程序（包括不认系统代理的游戏、命令行工具、微软商店应用）都会经过本软件。需要以管理员身份运行。\n\n' +
@@ -760,11 +780,11 @@ function pageAdvanced() {
     h('label', { class: 'radio' }, h('input', { type: 'radio', name: 'how', checked: set.tunMode, onchange: () => setSetting({ tunMode: true }) }),
       h('div', null, h('div', null, 'TUN 虚拟网卡（需要管理员）'), helpText('接管所有程序，包括游戏、命令行工具。'))),
     helpText(st.isAdmin ? '当前已是管理员身份。' : '当前不是管理员身份。', 'mt4'));
-  if (set.tunMode && !st.isAdmin) {
+  if (st.tunSupported && set.tunMode && !st.isAdmin) {
     how.append(helpText('TUN 模式要以管理员身份运行才能连接。点下面的按钮，Windows 会弹窗确认。', 'err mt4'),
       h('div', { class: 'mt8' }, btn('以管理员身份重新启动', () => act('admin-restart', {}))));
   }
-  if (set.tunMode) {
+  if (st.tunSupported && set.tunMode) {
     how.append(settingRow('TUN 网络栈', '决定如何处理虚拟网卡收到的数据包。', TUN_STACKS.map((x) => x[1]).join('\n'), null),
       h('div', { class: 'chips' }, TUN_STACKS.map(([v]) => chip(v, set.tunStack === v, () => setSetting({ tunStack: v })))));
   }
@@ -773,7 +793,7 @@ function pageAdvanced() {
   // ---- 网络选项 ----
   const portInput = h('input', { type: 'number', min: 1024, max: 65535, value: draft('port', String(set.mixedPort)), oninput: (e) => { drafts.port = e.target.value; } });
   out.push(card('网络选项', '一般不需要改。遇到具体问题时按说明调整，改完会自动重载（已连接时）。',
-    switchRow('拦截 QUIC（UDP 443）', '解决 YouTube 卡顿、部分网页一直转圈等问题（TUN 模式下起作用）。默认开。', set.blockQuic,
+    !st.tunSupported ? null : switchRow('拦截 QUIC（UDP 443）', '解决 YouTube 卡顿、部分网页一直转圈等问题（TUN 模式下起作用）。默认开。', set.blockQuic,
       '很多 Google 服务优先用 QUIC（走 UDP 443 端口）。不少代理线路对 UDP 支持不好，会导致一直转圈。开启后会拒绝 QUIC，程序自动改用普通 TCP，几乎没有副作用。\n\n系统代理模式下浏览器本来就不会经代理走 QUIC，这个开关不影响。',
       (v) => setSetting({ blockQuic: v })),
     switchRow('IPv6', '默认关。打开后代理也转发 IPv6 流量。', set.ipv6,
@@ -838,13 +858,13 @@ function pageAdvanced() {
     'IP-CIDR,8.8.8.0/24,DIRECT          IP 段\n' +
     'GEOIP,CN,DIRECT                    按 IP 所属国家\n' +
     'GEOSITE,cn,DIRECT                  按网站分类（内置数据库）\n' +
-    'PROCESS-NAME,chrome.exe,DIRECT     按程序名\n\n' +
+    'PROCESS-NAME,' + P('chrome.exe', 'Google Chrome') + ',DIRECT     按程序名\n\n' +
     '去向可以是 DIRECT（直连）、REJECT（拒绝）或你订阅里任何一个策略组的名字。\n\n' +
     '以 # 开头的行是注释，会被忽略。',
     helpText('想让某个网站强制直连/走代理，在这里加一行。', 'mb8'), rules,
     h('div', { class: 'row mt8' },
       btn('保存规则', () => { const v = drafts.rules ?? rules.value; delete drafts.rules; setSetting({ extraRules: v }, '规则已保存'); }),
-      btn('填入常用示例', () => { rules.value = PRESET_RULES; drafts.rules = PRESET_RULES; }, 'outlined'))));
+      btn('填入常用示例', () => { rules.value = presetRules(); drafts.rules = presetRules(); }, 'outlined'))));
 
   // ---- 覆写 ----
   const ov = h('textarea', { class: 'mono', placeholder: '+rules:\n  - DOMAIN-SUFFIX,example.com,DIRECT', oninput: (e) => { drafts.ov = e.target.value; } });
@@ -861,9 +881,11 @@ function pageAdvanced() {
     h('div', { class: 'mt8' }, btn('保存覆写', () => { const v = drafts.ov ?? ov.value; delete drafts.ov; setSetting({ overrideYaml: v }, '覆写已保存'); }))));
 
   // ---- 启动与托盘 ----
-  out.push(card('启动与托盘',
-    '关闭窗口不会退出，软件在屏幕右下角的托盘里继续运行：单击托盘图标打开窗口，右键可以连接 / 断开 / 切换出站模式 / 退出。\n\n退出软件时会自动断开并恢复原来的系统代理设置。',
-    switchRow('开机自动启动', '登录 Windows 后自动在托盘里启动（不弹窗口）。默认关。', set.autoStart, null, (v) => setSetting({ autoStart: v })),
+  out.push(card(P('启动与托盘', '启动与菜单栏'),
+    P('关闭窗口不会退出，软件在屏幕右下角的托盘里继续运行：单击托盘图标打开窗口，右键可以连接 / 断开 / 切换出站模式 / 退出。',
+      'EasyClash 常驻在屏幕顶部的菜单栏（双环图标）：点图标可以连接 / 断开 / 切换出站模式 / 打开控制面板 / 退出。控制面板就是这个浏览器页面，关掉不影响代理。') +
+    '\n\n退出软件时会自动断开并恢复原来的系统代理设置。',
+    switchRow('开机自动启动', P('登录 Windows 后自动在托盘里启动（不弹窗口）。默认关。', '登录 Mac 后自动在菜单栏启动（不打开控制面板）。默认关。'), set.autoStart, null, (v) => setSetting({ autoStart: v })),
     switchRow('启动后自动连接', '软件一打开就自动连接正在用的订阅。默认关。', set.autoConnect, null, (v) => setSetting({ autoConnect: v })),
     h('div', { class: 'mt8' }, btn('设为 clash:// 一键导入的打开方式', () => act('claim-protocol', {}), 'outlined')),
     helpText('机场网页上的「一键导入 Clash」按钮会打开 clash:// 链接。点了没反应或打开的是别的软件时，点这个按钮让它交给本软件。', 'mt4')));
@@ -887,7 +909,7 @@ function pageAdvanced() {
 
   // ---- 关于 ----
   out.push(card('关于', null,
-    kv('软件', 'EasyClash Windows 版 ' + st.version),
+    kv('软件', 'EasyClash ' + P('Windows', 'Mac') + ' 版 ' + st.version),
     kv('内核', 'mihomo ' + st.coreVersion),
     kv('数据位置', st.dataDir),
     helpText('本软件只是 mihomo 内核的一个简化界面，节点和线路都来自你自己的订阅。', 'mt4')));
