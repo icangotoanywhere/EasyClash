@@ -55,7 +55,7 @@ wait_status() { # 等到连接状态变成 $1
     [ "$s" = "$1" ] && return 0
     sleep 1
   done
-  echo "状态一直是「$s」，错误：$(api state | field error)"
+  echo "状态一直是「${s}」，错误：$(api state | field error)"
   return 1
 }
 wait_exit() { # 等进程 $1 结束（本脚本启动的子进程结束后是僵尸进程，也算结束）
@@ -156,9 +156,9 @@ echo
 python3 -c 'import urllib.request;print("Python 读到的系统代理：", urllib.request.getproxies())' | tee "$OUT/py-proxies.txt"
 grep -q "127.0.0.1:$MIXED" "$OUT/py-proxies.txt" && pass "其他程序（Python）能读到系统代理" || fail "Python 没读到系统代理"
 code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -x "http://127.0.0.1:$MIXED" https://www.example.com)
-[ "$code" = "200" ] && pass "经本软件的 HTTP 代理访问 https://www.example.com（$code）" || fail "HTTP 代理访问失败（$code）"
+[ "$code" = "200" ] && pass "经本软件的 HTTP 代理访问 https://www.example.com（${code}）" || fail "HTTP 代理访问失败（${code}）"
 code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' --socks5-hostname "127.0.0.1:$MIXED" https://www.example.com)
-[ "$code" = "200" ] && pass "经本软件的 SOCKS5 代理访问（$code）" || fail "SOCKS5 代理访问失败（$code）"
+[ "$code" = "200" ] && pass "经本软件的 SOCKS5 代理访问（${code}）" || fail "SOCKS5 代理访问失败（${code}）"
 
 step "4. 锁定出口地区、测速、内核接口"
 r=$(api region/lock '{"code":"JP"}')
@@ -168,7 +168,7 @@ r=$(api region/test '{"code":"SG"}')
 echo "$r"
 [ "$(echo "$r" | field ok)" = "True" ] && pass "新加坡测速：$(echo "$r" | field msg)" || fail "地区测速失败"
 code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -x "http://127.0.0.1:$MIXED" https://www.example.com)
-[ "$code" = "200" ] && pass "锁定后仍能访问（$code）" || fail "锁定后访问失败（$code）"
+[ "$code" = "200" ] && pass "锁定后仍能访问（${code}）" || fail "锁定后访问失败（${code}）"
 p=$(inst port)
 t=$(inst token)
 n=$(curl -sS -m 20 -H "X-EC-Token: $t" "http://127.0.0.1:$p/core/proxies" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["proxies"]))' 2>/dev/null)

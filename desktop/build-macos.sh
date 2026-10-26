@@ -33,14 +33,16 @@ step "2/5 编译（arm64 + amd64，合并成通用程序）"
 go version
 go mod tidy
 MIHOMO=$(go list -m -f '{{.Version}}' github.com/metacubex/mihomo)
+# Mac 版没有 TUN 模式，不需要 gvisor 网络栈（with_gvisor），安装包小一些
 LDF="-s -w -X main.appVersion=$VER -X github.com/metacubex/mihomo/constant.Version=$MIHOMO"
 rm -rf dist && mkdir -p dist/bin
 for arch in arm64 amd64; do
   echo "编译 $arch …"
-  GOOS=darwin GOARCH=$arch go build -trimpath -tags with_gvisor -ldflags "$LDF" -o "dist/bin/EasyClash-$arch" .
+  GOOS=darwin GOARCH=$arch go build -trimpath -ldflags "$LDF" -o "dist/bin/EasyClash-$arch" .
 done
 lipo -create -output dist/bin/EasyClash dist/bin/EasyClash-arm64 dist/bin/EasyClash-amd64
 lipo -info dist/bin/EasyClash
+ls -la dist/bin
 
 step "3/5 打包 EasyClash.app"
 APP=dist/EasyClash.app
