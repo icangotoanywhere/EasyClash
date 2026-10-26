@@ -47,24 +47,30 @@ jobs:
       - name: Build EasyClash.exe
         if: steps.src.outputs.present == 'true'
         env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: "0"
           GOFLAGS: -mod=mod
         run: |
-          set -e
-          ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
-          cd windows
-          go install github.com/tc-hib/go-winres@v0.3.3
-          "$(go env GOPATH)/bin/go-winres" make --in winres/winres.json --arch amd64 --product-version "$ver.0" --file-version "$ver.0"
-          go mod tidy
-          mihomo=$(go list -m -f '{{.Version}}' github.com/metacubex/mihomo)
-          go build -trimpath -tags with_gvisor -ldflags "-H windowsgui -s -w -X main.appVersion=$ver -X github.com/metacubex/mihomo/constant.Version=$mihomo" -o EasyClash.exe .
-          ls -la EasyClash.exe
-          mkdir -p ../dist/EasyClash-Windows
-          cp EasyClash.exe ../dist/EasyClash-Windows/
-          cp README.md ../dist/EasyClash-Windows/README.md
-          cd ../dist && zip -9 -r "../EasyClash-Windows-v$ver.zip" EasyClash-Windows
+          # 失败时把日志末尾写成错误注解，在 Actions 页面（及 API）上直接能看到原因
+          (
+            set -ex
+            ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+            cd windows
+            # go-winres 要在 Linux 上运行，必须用宿主平台安装（不能带 GOOS=windows）
+            go install github.com/tc-hib/go-winres@v0.3.3
+            "$(go env GOPATH)/bin/go-winres" make --in winres/winres.json --arch amd64 --product-version "$ver.0" --file-version "$ver.0"
+            go mod tidy
+            mihomo=$(go list -m -f '{{.Version}}' github.com/metacubex/mihomo)
+            GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -tags with_gvisor -ldflags "-H windowsgui -s -w -X main.appVersion=$ver -X github.com/metacubex/mihomo/constant.Version=$mihomo" -o EasyClash.exe .
+            ls -la EasyClash.exe
+            mkdir -p ../dist/EasyClash-Windows
+            cp EasyClash.exe ../dist/EasyClash-Windows/
+            cp README.md ../dist/EasyClash-Windows/README.md
+            cd ../dist && zip -9 -r "../EasyClash-Windows-v$ver.zip" EasyClash-Windows
+          ) > "$RUNNER_TEMP/win.log" 2>&1 && ok=1 || ok=0
+          cat "$RUNNER_TEMP/win.log"
+          if [ "$ok" != 1 ]; then
+            echo "::error title=Windows 版编译失败::$(tail -n 40 "$RUNNER_TEMP/win.log" | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk 'BEGIN{ORS="%0A"}{print}')"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         if: steps.src.outputs.present == 'true'
