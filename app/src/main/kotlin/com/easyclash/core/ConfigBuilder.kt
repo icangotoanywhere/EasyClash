@@ -235,6 +235,9 @@ object ConfigBuilder {
         cfg["mode"] = settings.mode.coreValue
         cfg["log-level"] = settings.logLevel
         cfg["ipv6"] = settings.ipv6
+        // 出境直连失败自动转代理：告诉内核侧（core/fallback.go）改走哪个组；没有这一项就是关闭
+        cfg.remove("easyclash-direct-fallback")
+        if (settings.directFallback) cfg["easyclash-direct-fallback"] = downloadVia
         cfg["external-controller"] = "127.0.0.1:$controllerPort"
         cfg["secret"] = secret
         cfg["unified-delay"] = true

@@ -823,7 +823,10 @@ function pageAdvanced() {
     helpText('系统代理指向的就是这个端口；其他软件也可以手动填 127.0.0.1:端口 使用（HTTP 和 SOCKS5 都支持）。默认 17890，避开其他 Clash 常用的 7890。', 'mt4'),
     switchRow('微软服务走国内（含必应国内版）', 'Office、Outlook、OneDrive、Windows 更新、必应等直连；Copilot、GitHub 仍走代理。默认开。', set.bingDirect,
       '微软的服务在国内都能直连，而且直连通常更快更稳。开启后这些服务一律直连，不随代理出口切换地区：\n• 必应（访问到的就是国内版 cn.bing.com）\n• Office / Microsoft 365、Outlook / Hotmail、OneDrive、Teams、Skype\n• Windows 更新、微软商店、Xbox、微软账号登录、MSN 等\n\n例外（照常按订阅规则走代理）：\n• Copilot：国内不提供服务，直连会用不了\n• GitHub：虽属微软，但国内直连经常很慢、时断时续\n\n想用国际版必应，或想让微软服务也走代理，关掉它即可。',
-      (v) => setSetting({ bingDirect: v }))));
+      (v) => setSetting({ bingDirect: v })),
+    switchRow('出境直连失败自动转代理', '发往境外的直连连不上时，自动改走代理再试一次。默认开。', set.directFallback,
+      '有些境外网站按规则是直连的（例如微软服务，或订阅规则没覆盖到、事先说不清会不会被墙的境外地址），偶尔会连不上。开启后：\n\n• 规则让它直连、而目标在境外时，如果直连连不上（超时、被拒绝、域名解析失败），自动改走代理再试一次。走的是首页选的出口地区（没锁定地区时走订阅的主策略组）。\n• 同一个网站失败过一次就记住，本次连接期间直接走代理，不再先试直连，只慢第一次。断开重连后重新判断。\n• 国内网站（在国内网站列表里，或 IP 在国内）直连失败按正常失败处理，不重试；局域网地址也不重试。\n\n只会"直连失败改走代理"，反过来绝不会：代理连不上时宁可打不开，也不会偷偷改用直连，避免你的真实 IP 暴露给 Claude、Google 等服务。\n\n局限：只能发现"连不上"。已经连上、之后才被掐断或限速的情况发现不了；UDP（如 QUIC）也不在此列。哪些网站被改走了代理，可以在内核日志里看到（带 [EasyClash] 字样）。\n\n首页选了"直连"模式时不起作用。',
+      (v) => setSetting({ directFallback: v }))));
 
   // ---- 自动选节点：优先 / 备用 ----
   const ivInput = h('input', { type: 'number', min: 1, max: 1440, value: draft('testIv', String(set.testIntervalMin || 2)), oninput: (e) => { drafts.testIv = e.target.value; } });
