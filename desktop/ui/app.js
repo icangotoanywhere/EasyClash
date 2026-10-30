@@ -130,6 +130,14 @@ async function act(path, body, okMsg) {
 const setSetting = (patch, okMsg) => act('settings', patch, okMsg);
 
 // ======================= 通用控件 =======================
+// 备用节点关键字输入框下方的"当前效果"说明（与安卓版 AdvancedScreen.kt 一致）：只有空格也按留空处理
+function backupKeywordEffect(raw) {
+  const kw = (raw || '').trim();
+  if (!kw && raw) return '当前效果：只填了空格，保存时会去掉，等同留空——不分级，同一地区所有节点只按延迟挑最快的。';
+  if (!kw) return '当前效果：不分级，同一地区所有节点只按延迟挑最快的。';
+  const tail = kw !== raw ? '（首尾空格保存时会自动去掉）' : '';
+  return `当前效果：名字含「${kw}」的节点作备用，其余为优先${tail}。某地区没有这类节点时，该地区不分级。`;
+}
 function helpText(text, cls) { return h('div', { class: 'help ' + (cls || '') }, text); }
 function kv(k, v, id) { return h('div', { class: 'kv' }, h('span', { class: 'k' }, k), h('span', { class: 'v', id }, v)); }
 function btn(text, onClick, variant, disabled) {
@@ -819,7 +827,10 @@ function pageAdvanced() {
 
   // ---- 自动选节点：优先 / 备用 ----
   const ivInput = h('input', { type: 'number', min: 1, max: 1440, value: draft('testIv', String(set.testIntervalMin || 2)), oninput: (e) => { drafts.testIv = e.target.value; } });
-  const kwInput = h('input', { type: 'text', maxlength: 20, placeholder: '留空 = 不分级', value: draft('backupKw', set.backupKeyword || ''), oninput: (e) => { drafts.backupKw = e.target.value; } });
+  const kwEffect = helpText('', 'mt4');
+  const showKwEffect = (raw) => { kwEffect.textContent = backupKeywordEffect(raw); };
+  const kwInput = h('input', { type: 'text', maxlength: 20, placeholder: '留空 = 不分级，所有节点只按延迟选', value: draft('backupKw', set.backupKeyword || ''), oninput: (e) => { drafts.backupKw = e.target.value; showKwEffect(e.target.value); } });
+  showKwEffect(kwInput.value);
   const penInput = h('input', { type: 'number', min: 0, max: 5000, value: draft('backupPen', String(set.backupPenaltyMs ?? 100)), oninput: (e) => { drafts.backupPen = e.target.value; } });
   out.push(card('自动测速与选节点',
     '【自动测速间隔】锁定地区后，每隔这么多分钟把该地区的节点测一遍，自动换到最快的（分级时同时判断用优先还是备用）。一次测速每个节点只发一个很小的请求，21 个节点约 10 KB 流量，可以放心设短一些；建议 1～10 分钟。\n\n' +
@@ -835,6 +846,7 @@ function pageAdvanced() {
     helpText('名字含关键字的节点降为备用，只在其他节点明显更慢时才用。', 'mb8'),
     h('label', { class: 'field mt12' }, '备用节点关键字'),
     kwInput,
+    kwEffect,
     h('label', { class: 'field mt12' }, '优先比备用慢多少毫秒才用备用'),
     h('div', { class: 'row' }, h('div', { class: 'grow' }, penInput), btn('保存', () => {
       const p = parseInt(drafts.backupPen ?? penInput.value, 10);

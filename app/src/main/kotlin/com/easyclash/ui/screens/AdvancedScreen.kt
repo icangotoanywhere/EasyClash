@@ -141,8 +141,11 @@ fun AdvancedScreen(vm: MainViewModel) {
             HelpText("名字含关键字的节点降为备用，只在其他节点明显更慢时才用。", Modifier.padding(bottom = 4.dp))
             OutlinedTextField(
                 value = kw, onValueChange = { kw = it.take(20) },
-                label = { Text("备用节点关键字（留空 = 不分级）") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                label = { Text("备用节点关键字（留空 = 不分级）") },
+                placeholder = { Text("留空 = 不分级，所有节点只按延迟选") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
+            HelpText(backupKeywordEffect(kw), Modifier.padding(top = 4.dp))
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = penalty, onValueChange = { penalty = it.filter(Char::isDigit).take(4) },
@@ -326,4 +329,15 @@ private fun ConnectionsDialog(vm: MainViewModel, onClose: () -> Unit) {
         confirmButton = { TextButton(onClick = onClose) { Text("关闭") } },
         dismissButton = { TextButton(onClick = { vm.closeAllConnections() }) { Text("全部断开") } },
     )
+}
+
+/** 备用节点关键字输入框下方的"当前效果"说明：只有空格也按留空处理（保存时会去掉首尾空格） */
+private fun backupKeywordEffect(raw: String): String {
+    val kw = raw.trim()
+    return when {
+        kw.isEmpty() && raw.isNotEmpty() -> "当前效果：只填了空格，保存时会去掉，等同留空——不分级，同一地区所有节点只按延迟挑最快的。"
+        kw.isEmpty() -> "当前效果：不分级，同一地区所有节点只按延迟挑最快的。"
+        kw != raw -> "当前效果：名字含「$kw」的节点作备用，其余为优先（首尾空格保存时会自动去掉）。某地区没有这类节点时，该地区不分级。"
+        else -> "当前效果：名字含「$kw」的节点作备用，其余为优先。某地区没有这类节点时，该地区不分级。"
+    }
 }
