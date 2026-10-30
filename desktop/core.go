@@ -157,10 +157,13 @@ func coreStart(homeDir, configPath string) error {
 	C.SetHomeDir(homeDir)
 	C.SetConfig(configPath)
 	captureCoreLogs()
-	if err := hub.Parse(buf); err != nil {
+	cfg, err := executor.ParseWithBytes(buf)
+	if err != nil {
 		executor.Shutdown()
 		return err
 	}
+	installDirectFallback(cfg, buf)
+	hub.ApplyConfig(cfg)
 	coreRunning = true
 	return nil
 }
@@ -181,6 +184,7 @@ func coreReload(configPath string) error {
 		return err
 	}
 	C.SetConfig(configPath)
+	installDirectFallback(cfg, buf)
 	executor.ApplyConfig(cfg, false)
 	return nil
 }

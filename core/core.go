@@ -122,9 +122,12 @@ func Start(homeDir string, configPath string) error {
 	logMu.Unlock()
 	captureLogs()
 
-	if err := hub.Parse(buf); err != nil {
+	cfg, err := executor.ParseWithBytes(buf)
+	if err != nil {
 		return err
 	}
+	installDirectFallback(cfg, buf)
+	hub.ApplyConfig(cfg)
 	running = true
 	return nil
 }
@@ -145,6 +148,7 @@ func Reload(configPath string) error {
 		return err
 	}
 	C.SetConfig(configPath)
+	installDirectFallback(cfg, buf)
 	executor.ApplyConfig(cfg, false)
 	return nil
 }

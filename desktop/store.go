@@ -35,6 +35,7 @@ type Settings struct {
 	IPv6               bool     `json:"ipv6"`
 	BlockQuic          bool     `json:"blockQuic"`
 	BingDirect         bool     `json:"bingDirect"`
+	DirectFallback     bool     `json:"directFallback"` // 出境直连失败自动转代理
 	UseSubscriptionDNS bool     `json:"useSubscriptionDns"`
 	TunMode            bool     `json:"tunMode"`  // false = 系统代理（默认）；true = TUN 虚拟网卡（需要管理员）
 	TunStack           string   `json:"tunStack"` // gvisor / mixed / system
@@ -59,7 +60,7 @@ type Settings struct {
 func defaultSettings() Settings {
 	return Settings{
 		Mode: "rule", AppProxyMode: "all", AppList: []string{},
-		BlockQuic: true, BingDirect: true, TunStack: "gvisor", LogLevel: "info",
+		BlockQuic: true, BingDirect: true, DirectFallback: true, TunStack: "gvisor", LogLevel: "info",
 		MixedPort: 17890, GeoAutoUpdate: true, BackupKeyword: "中转", BackupPenaltyMs: 100, TestIntervalMin: 2,
 	}
 }

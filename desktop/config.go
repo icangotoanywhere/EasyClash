@@ -418,6 +418,11 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 	cfg["mode"] = st.Mode
 	cfg["log-level"] = st.LogLevel
 	cfg["ipv6"] = st.IPv6
+	// 出境直连失败自动转代理：告诉内核侧（fallback.go）改走哪个组；没有这一项就是关闭
+	delete(cfg, "easyclash-direct-fallback")
+	if st.DirectFallback {
+		cfg["easyclash-direct-fallback"] = downloadVia
+	}
 	cfg["external-controller"] = controller
 	cfg["secret"] = secret
 	cfg["unified-delay"] = true

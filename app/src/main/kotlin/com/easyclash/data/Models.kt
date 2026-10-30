@@ -70,6 +70,7 @@ data class Settings(
     var ipv6: Boolean = false,
     var blockQuic: Boolean = true,
     var bingDirect: Boolean = true,              // 微软服务走国内（含必应国内版），键名沿用旧名以保留用户设置
+    var directFallback: Boolean = true,          // 出境直连失败自动转代理
     var useSubscriptionDns: Boolean = false,
     var tunStack: TunStack = TunStack.GVISOR,
     var logLevel: String = "info",
@@ -94,7 +95,7 @@ data class Settings(
         put("appList", JSONArray(appList.toList()))
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
         put("backupKeyword", backupKeyword); put("backupPenaltyMs", backupPenaltyMs); put("testIntervalMin", testIntervalMin)
-        put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect)
+        put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect); put("directFallback", directFallback)
         put("useSubscriptionDns", useSubscriptionDns)
         put("tunStack", tunStack.name); put("logLevel", logLevel)
         put("extraRules", extraRules); put("overrideYaml", overrideYaml)
@@ -119,6 +120,7 @@ data class Settings(
             s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)
             s.blockQuic = o.optBoolean("blockQuic", true)
             s.bingDirect = o.optBoolean("bingDirect", true)
+            s.directFallback = o.optBoolean("directFallback", true)
             s.useSubscriptionDns = o.optBoolean("useSubscriptionDns", false)
             s.tunStack = runCatching { TunStack.valueOf(o.optString("tunStack")) }.getOrDefault(TunStack.GVISOR)
             s.logLevel = o.optString("logLevel", "info")
