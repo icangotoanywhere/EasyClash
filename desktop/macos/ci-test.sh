@@ -173,6 +173,11 @@ p=$(inst port)
 t=$(inst token)
 n=$(curl -sS -m 20 -H "X-EC-Token: $t" "http://127.0.0.1:$p/core/proxies" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["proxies"]))' 2>/dev/null)
 [ "${n:-0}" -gt 4 ] && pass "内核接口（经界面服务转发）可用：$n 个代理/组" || fail "内核接口不可用"
+m=$(curl -sS -m 20 -H "X-EC-Token: $t" "http://127.0.0.1:$p/core/rules" | python3 -c '
+import json,sys
+rs=json.load(sys.stdin)["rules"]
+print(sum(1 for r in rs if r["type"]=="AND" and "microsoft.com" in r["payload"] and "copilot.microsoft.com" in r["payload"] and r["proxy"]=="DIRECT"))' 2>/dev/null)
+[ "${m:-0}" = "1" ] && pass "「微软服务走国内」规则已被内核加载（Copilot 例外在内）" || fail "微软直连规则没有生效：${m}"
 r=$(api processes)
 c=$(echo "$r" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)))' 2>/dev/null)
 [ "${c:-0}" -gt 5 ] && pass "读取进程列表（分程序代理用）：$c 个" || fail "进程列表为空"

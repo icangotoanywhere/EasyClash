@@ -372,10 +372,7 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 		front = append(front, "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT")
 	}
 	if st.BingDirect {
-		// 必应直连：国内可访问且稳定，直连后自动落到国内版（cn.bing.com），不随代理出口切换地区
-		for _, d := range []string{"bing.com", "bing.net", "bingapis.com", "bing.com.cn"} {
-			front = append(front, "DOMAIN-SUFFIX,"+d+",DIRECT")
-		}
+		front = append(front, microsoftDirectRule())
 	}
 	for _, line := range strings.Split(st.ExtraRules, "\n") {
 		line = strings.TrimSpace(line)
@@ -543,4 +540,61 @@ func urlTestGroup(name string, nodes []any, providers []string, filter, exclude 
 		g["exclude-filter"] = exclude
 	}
 	return g
+}
+
+// 微软服务走国内（含必应国内版），与安卓版 ConfigBuilder.kt 一致：微软的服务在国内都能直连，直连更快更稳，
+// 必应也会自动落到国内版（cn.bing.com）。例外：Copilot（国内不提供服务）不直连；GitHub 不在名单里（国内直连不稳）。
+// 例外的域名不会被这条规则命中，交给订阅自己的规则处理（一般就是走代理）。
+var microsoftDirectDomains = []string{
+	"bing.com",
+	"bing.net",
+	"bingapis.com",
+	"bing.com.cn",
+	"microsoft.com",
+	"microsoftonline.com",
+	"microsoftonline-p.com",
+	"msauth.net",
+	"msftauth.net",
+	"live.com",
+	"live.net",
+	"office.com",
+	"office.net",
+	"office365.com",
+	"microsoft365.com",
+	"outlook.com",
+	"hotmail.com",
+	"onedrive.com",
+	"sharepoint.com",
+	"onenote.com",
+	"msn.com",
+	"skype.com",
+	"xbox.com",
+	"xboxlive.com",
+	"windows.com",
+	"windowsupdate.com",
+	"msftconnecttest.com",
+	"msftncsi.com",
+	"microsoftstore.com",
+	"visualstudio.com",
+	"s-microsoft.com",
+	"aka.ms",
+}
+
+var microsoftProxyExceptions = []string{
+	"copilot.microsoft.com",
+	"designer.microsoft.com",
+	"sydney.bing.com",
+	"edgeservices.bing.com",
+}
+
+// microsoftDirectRule 一条逻辑规则：属于微软域名、又不是例外（Copilot）的 → 直连
+func microsoftDirectRule() string {
+	or := func(list []string) string {
+		parts := make([]string, len(list))
+		for i, d := range list {
+			parts[i] = "(DOMAIN-SUFFIX," + d + ")"
+		}
+		return "OR,(" + strings.Join(parts, ",") + ")"
+	}
+	return "AND,((" + or(microsoftDirectDomains) + "),(NOT,((" + or(microsoftProxyExceptions) + ")))),DIRECT"
 }

@@ -212,10 +212,7 @@ object ConfigBuilder {
         }
         val front = mutableListOf<String>()
         if (settings.blockQuic) front += "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT"
-        if (settings.bingDirect) {
-            // 必应直连：国内可访问且稳定，直连后自动落到国内版（cn.bing.com），不随代理出口切换地区
-            front += listOf("bing.com", "bing.net", "bingapis.com", "bing.com.cn").map { "DOMAIN-SUFFIX,$it,DIRECT" }
-        }
+        if (settings.bingDirect) front += microsoftDirectRule()
         settings.extraRules.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { front += it }
         // 地理数据库的更新下载也固定走代理（理由同上）
         if (!downloadVia.contains(',')) front += "DOMAIN,$GEO_MIRROR_HOST,$downloadVia"
@@ -358,4 +355,56 @@ object ConfigBuilder {
             }
         }
     }
+}
+
+/**
+ * 微软服务走国内（含必应国内版）：微软的服务在国内都能直连，直连更快更稳，必应也会自动落到国内版（cn.bing.com）。
+ * 例外：Copilot（国内不提供服务）不直连；GitHub 不在名单里（国内直连不稳）。
+ * 例外的域名不会被这条规则命中，交给订阅自己的规则处理（一般就是走代理）。
+ */
+internal val MICROSOFT_DIRECT_DOMAINS = listOf(
+            "bing.com",
+            "bing.net",
+            "bingapis.com",
+            "bing.com.cn",
+            "microsoft.com",
+            "microsoftonline.com",
+            "microsoftonline-p.com",
+            "msauth.net",
+            "msftauth.net",
+            "live.com",
+            "live.net",
+            "office.com",
+            "office.net",
+            "office365.com",
+            "microsoft365.com",
+            "outlook.com",
+            "hotmail.com",
+            "onedrive.com",
+            "sharepoint.com",
+            "onenote.com",
+            "msn.com",
+            "skype.com",
+            "xbox.com",
+            "xboxlive.com",
+            "windows.com",
+            "windowsupdate.com",
+            "msftconnecttest.com",
+            "msftncsi.com",
+            "microsoftstore.com",
+            "visualstudio.com",
+            "s-microsoft.com",
+            "aka.ms",
+        )
+internal val MICROSOFT_PROXY_EXCEPTIONS = listOf(
+            "copilot.microsoft.com",
+            "designer.microsoft.com",
+            "sydney.bing.com",
+            "edgeservices.bing.com",
+        )
+
+/** 一条逻辑规则：属于微软域名、又不是例外（Copilot）的 → 直连 */
+internal fun microsoftDirectRule(): String {
+    fun or(list: List<String>) = list.joinToString(",", prefix = "OR,(", postfix = ")") { "(DOMAIN-SUFFIX,$it)" }
+    return "AND,((${or(MICROSOFT_DIRECT_DOMAINS)}),(NOT,((${or(MICROSOFT_PROXY_EXCEPTIONS)})))),DIRECT"
 }

@@ -69,7 +69,7 @@ data class Settings(
     var lockedRegion: String? = null,           // 锁定的地区代码，如 "SG"，null 表示不锁定
     var ipv6: Boolean = false,
     var blockQuic: Boolean = true,
-    var bingDirect: Boolean = true,              // 必应始终直连（用国内版）
+    var bingDirect: Boolean = true,              // 微软服务走国内（含必应国内版），键名沿用旧名以保留用户设置
     var useSubscriptionDns: Boolean = false,
     var tunStack: TunStack = TunStack.GVISOR,
     var logLevel: String = "info",

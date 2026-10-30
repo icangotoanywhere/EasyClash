@@ -114,9 +114,9 @@ fun AdvancedScreen(vm: MainViewModel) {
             TextButton(onClick = { port.toIntOrNull()?.let { p -> if (p == 0 || p in 1024..65535) vm.updateSettings { it.mixedPort = p } } }) { Text("保存端口") }
 
             SwitchRow(
-                "必应始终用国内版", "bing.com 直连，不随代理出口切换到当地必应。默认开。",
+                "微软服务走国内（含必应国内版）", "Office、Outlook、OneDrive、Windows 更新、必应等直连；Copilot、GitHub 仍走代理。默认开。",
                 settings.bingDirect,
-                detail = "必应在国内有正常服务且直连很稳定。开启后所有 bing 相关域名走直连，访问到的就是国内版必应（cn.bing.com），切换代理国家也不会变成当地版本。\n\n想用国际版必应时关掉它即可。",
+                detail = "微软的服务在国内都能直连，而且直连通常更快更稳。开启后这些服务一律直连，不随代理出口切换地区：\n• 必应（访问到的就是国内版 cn.bing.com）\n• Office / Microsoft 365、Outlook / Hotmail、OneDrive、Teams、Skype\n• Windows 更新、微软商店、Xbox、微软账号登录、MSN 等\n\n例外（照常按订阅规则走代理）：\n• Copilot：国内不提供服务，直连会用不了\n• GitHub：虽属微软，但国内直连经常很慢、时断时续\n\n想用国际版必应，或想让微软服务也走代理，关掉它即可。",
             ) { v -> vm.updateSettings { it.bingDirect = v } }
         }
 
