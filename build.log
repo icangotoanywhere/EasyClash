@@ -1,0 +1,227 @@
+++ cut '-d"' -f2
+++ grep -oE 'versionName = "[^"]+"' app/build.gradle.kts
++ ver=1.0.24
++ sw_vers
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
++ cd desktop
++ bash build-macos.sh 1.0.24
+
+==== 1/5 准备地理数据库（压缩后打包进程序） ====
+下载 geoip.metadb …
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+100 8229k  100 8229k    0     0  41.0M      0 --:--:-- --:--:-- --:--:-- 41.0M
+下载 geosite.dat …
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+100 4251k  100 4251k    0     0  16.9M      0 --:--:-- --:--:-- --:--:-- 16.9M
+下载 GeoLite2-ASN.mmdb …
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+100 8789k  100 8789k    0     0  31.5M      0 --:--:-- --:--:-- --:--:-- 31.5M
+total 22944
+drwxr-xr-x   9 runner  staff      288 Oct 30 03:45 .
+drwxr-xr-x  34 runner  staff     1088 Oct 30 03:45 ..
+-rw-r--r--   1 runner  staff  4172579 Oct 30 03:45 geoip.metadb.gz
+-rw-r--r--   1 runner  staff  5077247 Oct 30 03:45 GeoLite2-ASN.mmdb.gz
+-rw-r--r--   1 runner  staff  1299162 Oct 30 03:45 geosite.dat.gz
+-rw-r--r--   1 runner  staff     1658 Oct 30 03:45 tray_mac_off.png
+-rw-r--r--   1 runner  staff     1205 Oct 30 03:45 tray_mac_on.png
+-rw-r--r--   1 runner  staff     4360 Oct 30 03:45 tray_off.ico
+-rw-r--r--   1 runner  staff     4239 Oct 30 03:45 tray_on.ico
+
+==== 2/5 编译（arm64 + amd64，合并成通用程序） ====
+go version go1.26.10 darwin/arm64
+go: downloading fyne.io/systray v1.12.2
+go: downloading github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
+go: downloading github.com/metacubex/mihomo v1.19.33
+go: downloading go.yaml.in/yaml/v3 v3.0.5
+go: downloading golang.org/x/sys v0.49.0
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading github.com/godbus/dbus/v5 v5.1.0
+go: downloading github.com/metacubex/http v0.1.8
+go: downloading github.com/oschwald/maxminddb-golang v1.12.0
+go: downloading golang.org/x/sync v0.11.0
+go: downloading golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
+go: downloading github.com/gofrs/uuid/v5 v5.4.0
+go: downloading github.com/metacubex/sing v0.5.8
+go: downloading github.com/sirupsen/logrus v1.9.4
+go: downloading github.com/dlclark/regexp2 v1.12.0
+go: downloading github.com/metacubex/randv2 v0.2.0
+go: downloading github.com/miekg/dns v1.1.63
+go: downloading github.com/easytier/easytier/easytier-go v0.0.0-20260910071355-3d0c9c3ca5e2
+go: downloading github.com/enfein/mieru/v3 v3.38.1
+go: downloading github.com/metacubex/amneziawg-go v0.0.0-20260908071407-0c1c6f40ecd7
+go: downloading github.com/metacubex/jls-quic-go v0.0.0-20260727080412-732f2fc9a34d
+go: downloading github.com/metacubex/jls-tls v0.0.0-20260723084315-67adc0e2f796
+go: downloading github.com/metacubex/mipstack v0.0.0-20261019124225-9a80a07eaeb9
+go: downloading github.com/metacubex/quic-go v0.61.1-0.20260727080200-2548683b76f4
+go: downloading github.com/metacubex/sing-mux v0.3.12
+go: downloading github.com/metacubex/sing-quic v0.0.0-20260904234848-1c242664697a
+go: downloading github.com/metacubex/sing-shadowsocks2 v0.2.8
+go: downloading github.com/metacubex/sing-vmess v0.2.5
+go: downloading github.com/metacubex/sing-wireguard v0.0.0-20261002050126-e5fa1a607406
+go: downloading github.com/metacubex/ssh v0.1.0
+go: downloading github.com/metacubex/tailscale v0.0.0-20260821153257-ff0ecd818181
+go: downloading github.com/metacubex/tls v0.1.9
+go: downloading github.com/metacubex/wireguard-go v0.0.0-20250820062549-a6cecdd7f57f
+go: downloading github.com/metacubex/zerotier-go v0.0.0-20260813124750-13fa6f45da5f
+go: downloading github.com/samber/lo v1.53.0
+go: downloading github.com/stretchr/testify v1.12.1
+go: downloading gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
+go: downloading google.golang.org/protobuf v1.34.2
+go: downloading github.com/bahlo/generic-list-go v0.2.0
+go: downloading github.com/metacubex/fswatch v0.1.1
+go: downloading golang.org/x/net v0.35.0
+go: downloading github.com/metacubex/age v0.0.0-20260603010618-28d156b4ea78
+go: downloading go4.org/netipx v0.0.0-20260823151212-3075585bcbeb
+go: downloading github.com/metacubex/bbolt v0.0.0-20260706163408-d4ec34ad7c48
+go: downloading github.com/mdlayher/netlink v1.7.2
+go: downloading golang.org/x/crypto v0.33.0
+go: downloading github.com/openacid/low v0.1.21
+go: downloading github.com/metacubex/sevenzip v1.6.4
+go: downloading github.com/klauspost/compress v1.17.9
+go: downloading github.com/metacubex/chi v0.1.1
+go: downloading github.com/metacubex/tfo-go v0.0.0-20260623020846-376a77860b8c
+go: downloading golang.org/x/tools v0.24.0
+go: downloading github.com/metacubex/bart v0.29.0
+go: downloading github.com/vmihailenco/msgpack/v5 v5.4.1
+go: downloading github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1
+go: downloading go.uber.org/mock v0.4.0
+go: downloading github.com/metacubex/cpu v0.1.2
+go: downloading github.com/metacubex/hkdf v0.1.0
+go: downloading github.com/metacubex/hpke v0.1.0
+go: downloading github.com/metacubex/mlkem v0.1.0
+go: downloading github.com/metacubex/sing-shadowsocks v0.2.13
+go: downloading github.com/metacubex/utls v1.8.8
+go: downloading github.com/mroth/weightedrand/v2 v2.1.0
+go: downloading github.com/metacubex/smux v0.0.0-20260105030934-d0c8756d3141
+go: downloading github.com/golang/snappy v1.0.0
+go: downloading github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604
+go: downloading github.com/metacubex/connect-ip-go v0.0.0-20260727083417-67ccdb0cf771
+go: downloading github.com/yosida95/uritemplate/v3 v3.0.2
+go: downloading github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e
+go: downloading github.com/metacubex/restls-client-go v0.1.9
+go: downloading github.com/metacubex/chacha v0.1.5
+go: downloading gitlab.com/go-extension/aes-ccm v0.0.0-20230221065045-e58665ef23c7
+go: downloading github.com/metacubex/edwards25519 v1.2.0
+go: downloading github.com/gobwas/ws v1.4.0
+go: downloading github.com/metacubex/blake3 v0.1.0
+go: downloading github.com/metacubex/yamux v0.0.0-20250918083631-dd5f17c0be49
+go: downloading github.com/metacubex/gvisor v0.0.0-20260922041103-e2cbcd6e7400
+go: downloading golang.org/x/term v0.29.0
+go: downloading golang.org/x/mod v0.20.0
+go: downloading go4.org/mem v0.0.0-20240501181205-ae6ca9944745
+go: downloading github.com/metacubex/jsonv2 v0.0.0-20260721082349-16b4998c8f89
+go: downloading github.com/jsimonetti/rtnetlink v1.4.0
+go: downloading github.com/metacubex/tailscale-wireguard-go v0.0.0-20260725073821-e61ab99cede2
+go: downloading github.com/pierrec/lz4/v4 v4.1.27
+go: downloading golang.org/x/text v0.22.0
+go: downloading github.com/kr/pretty v0.3.1
+go: downloading github.com/fsnotify/fsnotify v1.9.0
+go: downloading github.com/google/go-cmp v0.6.0
+go: downloading github.com/josharian/native v1.1.0
+go: downloading github.com/mdlayher/socket v0.5.1
+go: downloading github.com/insomniacslk/dhcp v0.0.0-20250109001534-8abf58130905
+go: downloading github.com/metacubex/qpack v0.6.0
+go: downloading github.com/metacubex/mhurl v0.1.0
+go: downloading github.com/metacubex/sing-tun v0.4.28
+go: downloading github.com/ajg/form v1.7.1
+go: downloading github.com/bodgit/plumbing v1.3.0
+go: downloading github.com/bodgit/windows v1.0.1
+go: downloading github.com/vmihailenco/tagparser/v2 v2.0.0
+go: downloading github.com/google/btree v1.1.3
+go: downloading github.com/coreos/go-iptables v0.8.0
+go: downloading github.com/metacubex/gopacket v1.1.20-0.20230608035415-7e2f98a3e759
+go: downloading github.com/klauspost/reedsolomon v1.12.3
+go: downloading golang.org/x/time v0.10.0
+go: downloading github.com/xtaci/lossyconn v0.0.0-20190602105132-8df528c0c9ae
+go: downloading github.com/dunglas/httpsfv v1.0.2
+go: downloading github.com/andybalholm/brotli v1.1.1
+go: downloading github.com/gobwas/httphead v0.1.0
+go: downloading github.com/gobwas/pool v0.2.1
+go: downloading github.com/gaukas/godicttls v0.0.4
+go: downloading github.com/RyuaNerin/go-krypto v1.3.0
+go: downloading github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344
+go: downloading github.com/ericlagergren/aegis v0.0.0-20250325060835-cd0defd64358
+go: downloading github.com/ericlagergren/siv v0.0.0-20220507050439-0b757b3aa5f1
+go: downloading github.com/metacubex/ascon v0.1.0
+go: downloading github.com/oasisprotocol/deoxysii v0.0.0-20220228165953-2091330c22b7
+go: downloading github.com/sina-ghaderi/rabaead v0.0.0-20220730151906-ab6e06b96e8c
+go: downloading github.com/frankban/quicktest v1.14.6
+go: downloading github.com/tailscale/certstore v0.1.1-0.20260409135935-3638fb84b77d
+go: downloading github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc
+go: downloading github.com/pires/go-proxyproto v0.8.0
+go: downloading github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
+go: downloading github.com/google/pprof v0.0.0-20240727154555-813a5fbdbec8
+go: downloading github.com/cilium/ebpf v0.12.3
+go: downloading github.com/kr/text v0.2.0
+go: downloading github.com/rogpeppe/go-internal v1.12.0
+go: downloading github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923
+go: downloading github.com/hashicorp/golang-lru/v2 v2.0.7
+go: downloading github.com/ulikunitz/xz v0.5.15
+go: downloading github.com/stangelandcl/ppmd v0.1.1
+go: downloading github.com/stretchr/objx v0.5.2
+go: downloading github.com/metacubex/nftables v0.0.0-20260426003805-208c2c1ba2cb
+go: downloading github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a
+go: downloading github.com/metacubex/wazero v0.0.0-20260628025728-9ae6bdcf2a7d
+go: downloading github.com/klauspost/cpuid/v2 v2.2.6
+go: downloading gitlab.com/yawning/bsaes.git v0.0.0-20190805113838-0a714cd429ec
+go: downloading github.com/xyproto/randomstring v1.0.5
+go: downloading github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010
+go: downloading github.com/ericlagergren/saferand v0.0.0-20220206064634-960a4dd2bc5c
+go: downloading github.com/ericlagergren/polyval v0.0.0-20220411101811-e25bc10ba391
+go: downloading github.com/google/tink/go v1.6.1
+go: downloading github.com/sina-ghaderi/poly1305 v0.0.0-20220724002748-c5926b03988b
+go: downloading github.com/sina-ghaderi/rabbitio v0.0.0-20220730151941-9ce26f4f872e
+go: downloading github.com/fxamacker/cbor/v2 v2.9.0
+go: downloading github.com/akutz/memconn v0.1.0
+go: downloading github.com/mitchellh/go-ps v1.0.0
+go: downloading github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55
+go: downloading github.com/github/fakeca v0.1.0
+go: downloading software.sslmate.com/src/go-pkcs12 v0.4.0
+go: downloading github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
+go: downloading github.com/safchain/ethtool v0.3.0
+go: downloading github.com/RyuaNerin/testingutil v0.1.0
+go: downloading github.com/go-ole/go-ole v1.3.0
+go: downloading github.com/vishvananda/netns v0.0.5
+go: downloading github.com/x448/float16 v0.8.4
+go: downloading github.com/coder/websocket v1.8.12
+编译 arm64 …
+# easyclash/desktop
+ld: warning: ignoring duplicate libraries: '-lobjc'
+编译 amd64 …
+# easyclash/desktop
+ld: warning: ignoring duplicate libraries: '-lobjc'
+Architectures in the fat file: dist/bin/EasyClash are: x86_64 arm64 
+total 507472
+drwxr-xr-x  5 runner  staff        160 Oct 30 03:47 .
+drwxr-xr-x  3 runner  staff         96 Oct 30 03:45 ..
+-rwxr-xr-x  1 runner  staff  129916898 Oct 30 03:47 EasyClash
+-rwxr-xr-x  1 runner  staff   66983608 Oct 30 03:47 EasyClash-amd64
+-rwxr-xr-x  1 runner  staff   62922722 Oct 30 03:46 EasyClash-arm64
+
+==== 3/5 打包 EasyClash.app ====
+dist/EasyClash.app/Contents/Info.plist: OK
+
+==== 4/5 签名（本机临时签名：没有苹果开发者证书，第一次打开需在「隐私与安全性」里允许） ====
+dist/EasyClash.app: replacing existing signature
+dist/EasyClash.app: valid on disk
+dist/EasyClash.app: satisfies its Designated Requirement
+Executable=/Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash.app/Contents/MacOS/EasyClash
+Identifier=com.easyclash.desktop
+Format=app bundle with Mach-O universal (x86_64 arm64)
+CodeDirectory v=20400 size=122158 flags=0x2(adhoc) hashes=3811+3 location=embedded
+Signature=adhoc
+
+==== 5/5 制作 dmg ====
+created: /Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash-macOS-v1.0.24.dmg
+-rw-r--r--@ 1 runner  staff  66248296 Oct 30 03:48 dist/EasyClash-macOS-v1.0.24.dmg
+
+完成：/Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash.app
+      /Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash-macOS-v1.0.24.dmg

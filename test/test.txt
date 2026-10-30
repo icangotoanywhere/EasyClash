@@ -1,0 +1,219 @@
+
+======== 准备 ========
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+arm64
+Architectures in the fat file: /Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash.app/Contents/MacOS/EasyClash are: x86_64 arm64 
+Executable=/Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash.app/Contents/MacOS/EasyClash
+Identifier=com.easyclash.desktop
+Format=app bundle with Mach-O universal (x86_64 arm64)
+An asterisk (*) denotes that a network service is disabled.
+Ethernet
+检查用的网络服务：Ethernet
+Enabled: No
+Server: 10.9.9.9
+Port: 3128
+Authenticated Proxy Enabled: 0
+--- 测试前的系统代理 ---
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *.local
+    1 : 169.254/16
+  }
+  FTPPassive : 1
+  HTTPEnable : 0
+}
+
+======== 1. 启动（后台模式） ========
+PASS: 启动成功，界面服务可用
+版本 1.0.24，平台 darwin，内核 v1.19.33，管理员 False
+PASS: 平台识别为 darwin
+PASS: TUN 标记为不支持
+
+======== 2. 导入订阅 ========
+{"msg":"已导入「ci-test」","ok":true}
+PASS: 导入订阅
+PASS: 订阅列表里有 1 个订阅
+
+======== 3. 连接（系统代理） ========
+PASS: 连接成功
+主组：节点选择，地区组数：3，sysProxyOn=True，提醒=
+PASS: 按地区分组（≥3 个）
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : 127.0.0.1
+    1 : localhost
+    2 : *.local
+    3 : ::1
+    4 : 10.0.0.0/8
+    5 : 172.16.0.0/12
+    6 : 192.168.0.0/16
+    7 : 169.254.0.0/16
+    8 : fe80::/10
+  }
+  FTPPassive : 1
+  HTTPEnable : 1
+  HTTPPort : 17890
+  HTTPProxy : 127.0.0.1
+  HTTPSEnable : 1
+  HTTPSPort : 17890
+  HTTPSProxy : 127.0.0.1
+  SOCKSEnable : 1
+  SOCKSPort : 17890
+  SOCKSProxy : 127.0.0.1
+}
+Enabled: Yes
+Server: 127.0.0.1
+Port: 17890
+Authenticated Proxy Enabled: 0
+Enabled: Yes
+Server: 127.0.0.1
+Port: 17890
+Authenticated Proxy Enabled: 0
+Enabled: Yes
+Server: 127.0.0.1
+Port: 17890
+Authenticated Proxy Enabled: 0
+127.0.0.1
+localhost
+*.local
+::1
+10.0.0.0/8
+172.16.0.0/12
+192.168.0.0/16
+169.254.0.0/16
+fe80::/10
+PASS: 系统代理（网页 / 安全网页 / SOCKS）都指向 127.0.0.1:17890
+PASS: 已备份原来的系统代理
+{"services":{"Ethernet":{"web":{"enabled":false,"server":"10.9.9.9","port":3128},"secure":{"enabled":false,"server":"","port":0},"socks":{"enabled":false,"server":"","port":0},"bypass":["*.local","169.254/16"],"autoUrl":"","autoEnabled":false}},"ours":"127.0.0.1:17890"}
+PASS: 首页没有误报「系统代理被改」
+Python 读到的系统代理： {'http': 'http://127.0.0.1:17890', 'https': 'http://127.0.0.1:17890', 'socks': 'http://127.0.0.1:17890'}
+PASS: 其他程序（Python）能读到系统代理
+PASS: 经本软件的 HTTP 代理访问 https://www.example.com（200）
+PASS: 经本软件的 SOCKS5 代理访问（200）
+
+======== 4. 锁定出口地区、测速、内核接口 ========
+{"msg":"","ok":true}
+PASS: 锁定日本
+{"msg":"🇸🇬 新加坡：仍是最快节点「🇸🇬 新加坡 01」","ok":true}
+PASS: 新加坡测速：🇸🇬 新加坡：仍是最快节点「🇸🇬 新加坡 01」
+PASS: 锁定后仍能访问（200）
+PASS: 内核接口（经界面服务转发）可用：18 个代理/组
+PASS: 「微软服务走国内」规则已被内核加载（Copilot 例外在内）
+PASS: 「出境直连失败自动转代理」已在内核里开启
+PASS: 读取进程列表（分程序代理用）：473 个
+['addonsd', 'ankacpd', 'ankarund', 'com.apple.CoreSimulator.CoreSimulatorService', 'copypaste', 'hosted-compute-agent', 'provjobd2696630523', 'Runner.Listener', 'Runner.Worker', 'simdiskimaged', 'SimLaunchHost.arm64', 'SimulatorTrampoline']
+
+======== 5. 开机自启（LaunchAgent） ========
+PASS: 已写入 LaunchAgent
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.easyclash.desktop</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash.app/Contents/MacOS/EasyClash</string>
+		<string>--autostart</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>LimitLoadToSessionType</key>
+	<string>Aqua</string>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+</dict>
+</plist>
+PASS: 关闭后已删除 LaunchAgent
+
+======== 6. 断开：恢复原来的系统代理 ========
+PASS: 已断开
+Enabled: No
+Server: 10.9.9.9
+Port: 3128
+Authenticated Proxy Enabled: 0
+<dictionary> {
+  ExceptionsList : <array> {
+    0 : *.local
+    1 : 169.254/16
+  }
+  FTPPassive : 1
+  HTTPEnable : 0
+  HTTPSEnable : 0
+  SOCKSEnable : 0
+}
+PASS: 恢复成原来的设置（10.9.9.9:3128，关闭）
+PASS: 备份文件已清理
+
+======== 7. 强制结束（kill -9）后再启动：先恢复系统代理 ========
+PASS: 重新连接，系统代理指向本软件
+（强制结束后系统代理仍指向本软件——预期如此，下次启动时恢复）
+PASS: 再次启动时恢复了系统代理
+PASS: 日志里记录了异常退出后的恢复
+PASS: 设置已保存（重启后仍锁定日本）
+
+======== 8. 单实例：再启动一个，应把请求交给已在运行的那个后自己退出 ========
+PASS: 第二个实例自动退出
+PASS: 已在运行的实例收到「打开控制面板」请求
+
+======== 9. 收到结束信号（SIGTERM）：断开并恢复系统代理 ========
+PASS: 收到 SIGTERM 后退出
+PASS: SIGTERM 退出时恢复了系统代理
+
+======== 10. 菜单栏模式：用 open 打开 .app ========
+PASS: 菜单栏模式启动成功
+进程：11853
+  PID STAT ELAPSED COMMAND
+11853 S      00:04 /Users/runner/work/EasyClash/EasyClash/desktop/dist/EasyClash.app/Contents/MacOS/EasyClash
+PASS: 进程在运行
+PASS: 启动时打开了控制面板
+截图：1-menubar.png
+菜单项：40:44: execution error: System Events got an error: Can’t get menu bar 2 of process "EasyClash". Invalid index. (-1719)
+
+======== 11. 菜单栏模式下连接 ========
+PASS: 菜单栏模式连接成功
+PASS: 系统代理指向本软件
+截图：3-menubar-connected.png
+菜单项：40:44: execution error: System Events got an error: Can’t get menu bar 2 of process "EasyClash". Invalid index. (-1719)
+
+======== 12. 再次打开（程序已在运行时又双击了它） ========
+PASS: 收到「再次打开」，打开控制面板
+PASS: 仍是同一个进程（没有重复启动）
+
+======== 13. clash:// 一键导入链接（程序运行中） ========
+pendingImport=clash://install-config?url=https%3A%2F%2Fexample.com%2Frunning.yaml&name=ci
+PASS: 收到 clash:// 链接
+
+======== 14. 退出（和点菜单栏「退出」一样）：断开并恢复系统代理 ========
+PASS: 已退出
+PASS: 退出时恢复了系统代理
+PASS: 已清理 instance.json
+
+======== 15. 点 clash:// 链接把程序启动起来 ========
+PASS: 通过链接启动成功
+pendingImport=clash://install-config?url=https%3A%2F%2Fexample.com%2Fcold.yaml&name=cold
+PASS: 启动时随之送来的链接也收到了
+
+======== 结果：46 项通过，0 项失败 ========
+/Users/runner/Library/Application Support/EasyClash:
+total 24
+drwxr-xr-x  12 runner  staff  384 Oct 30 03:48 .
+drwx------+ 31 runner  staff  992 Oct 30 03:48 ..
+-rw-r--r--   1 runner  staff    1 Oct 30 03:48 .menubar-hint-shown
+-rw-r--r--   1 runner  staff    0 Oct 30 03:48 .test-no-browser
+-rw-r--r--   1 runner  staff    0 Oct 30 03:48 crash.txt
+drwxr-xr-x   6 runner  staff  192 Oct 30 03:48 home
+-rw-------   1 runner  staff    0 Oct 30 03:48 instance.lock
+drwxr-xr-x   3 runner  staff   96 Oct 30 03:48 logs
+drwxr-xr-x   3 runner  staff   96 Oct 30 03:48 run
+-rw-r--r--   1 runner  staff  700 Oct 30 03:48 settings.json
+drwxr-xr-x   3 runner  staff   96 Oct 30 03:48 subs
+-rw-r--r--   1 runner  staff  255 Oct 30 03:48 subs.json
+
+/Users/runner/Library/Application Support/EasyClash/run:
+total 16
+drwxr-xr-x   3 runner  staff    96 Oct 30 03:48 .
+drwxr-xr-x  12 runner  staff   384 Oct 30 03:48 ..
+-rw-r--r--   1 runner  staff  4467 Oct 30 03:48 config.yaml
