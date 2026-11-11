@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -24,15 +25,15 @@ android {
     // 或用环境变量 EASYCLASH_KEYSTORE_PROPS 指定。两者都没有时退回 debug 签名，只用于自己测试和 CI 编译检查——
     // debug 签名每台机器都不一样，用它签的包不能当正式版发布（用户无法覆盖升级）。
     val releaseProps = listOfNotNull(
-        System.getenv("EASYCLASH_KEYSTORE_PROPS")?.let { java.io.File(it) },
+        System.getenv("EASYCLASH_KEYSTORE_PROPS")?.let { File(it) },
         rootProject.file("keystore.properties"),
-        java.io.File("D:/EasyClash/signing/keystore.properties"),  // 不能用 file()：Linux 上会把 "D:/…" 当成网址报错
+        File("D:/EasyClash/signing/keystore.properties"),  // 不能用 file()：Linux 上会把 "D:/…" 当成网址报错
     ).firstOrNull { it.isFile }?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
 
     signingConfigs {
         if (releaseProps != null) {
             create("release") {
-                storeFile = java.io.File(releaseProps.getProperty("storeFile"))
+                storeFile = File(releaseProps.getProperty("storeFile"))
                 storePassword = releaseProps.getProperty("storePassword")
                 keyAlias = releaseProps.getProperty("keyAlias")
                 keyPassword = releaseProps.getProperty("keyPassword")
