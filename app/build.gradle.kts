@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -18,10 +20,32 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
+    // 发布签名：密钥放在仓库之外（默认 D:\EasyClash\signing），由仓库根目录的 keystore.properties 指过去，
+    // 或用环境变量 EASYCLASH_KEYSTORE_PROPS 指定。两者都没有时退回 debug 签名，只用于自己测试和 CI 编译检查——
+    // debug 签名每台机器都不一样，用它签的包不能当正式版发布（用户无法覆盖升级）。
+    val releaseProps = listOfNotNull(
+        System.getenv("EASYCLASH_KEYSTORE_PROPS")?.let { file(it) },
+        rootProject.file("keystore.properties"),
+        file("D:/EasyClash/signing/keystore.properties"),
+    ).firstOrNull { it.isFile }?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+
+    signingConfigs {
+        if (releaseProps != null) {
+            create("release") {
+                storeFile = file(releaseProps.getProperty("storeFile"))
+                storePassword = releaseProps.getProperty("storePassword")
+                keyAlias = releaseProps.getProperty("keyAlias")
+                keyPassword = releaseProps.getProperty("keyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

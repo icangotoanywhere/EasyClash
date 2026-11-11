@@ -8,7 +8,7 @@
 | Windows | [⬇️ EasyClash-Windows.zip](../../releases/latest/download/EasyClash-Windows.zip) | 解压后双击 `EasyClash.exe`，免安装，Windows 10 以上 |
 | macOS | [⬇️ EasyClash-macOS.dmg](../../releases/latest/download/EasyClash-macOS.dmg) | Intel 和 M 系列芯片通用，macOS 12 以上；第一次打开要在「隐私与安全性」里点「仍要打开」，见[说明](desktop/README.md#macos-第一次打开) |
 
-以上链接永远指向最新版本；历史版本见 [Releases](../../releases)。所有文件由 GitHub Actions 在云端自动编译。
+以上链接永远指向最新版本；历史版本见 [Releases](../../releases)。安卓版和 Windows 版在维护者本机编译并签名（安卓版从 v1.0.25 起签名固定，可直接覆盖升级），macOS 版由 GitHub Actions 在云端的 Mac 上编译并测试。
 
 ## 为什么又做一个 Clash 客户端
 
@@ -72,7 +72,14 @@
 
 ### GitHub Actions
 
-Fork 后在 Actions 里手动运行 **Build**，产物（APK、Windows zip、macOS dmg）在 Artifacts。
+Fork 后在 Actions 里手动运行 **Build**，产物（APK、Windows zip、macOS dmg）在 Artifacts。云端编出的 APK 用的是临时 debug 签名，只用来检查能否编译。
+
+### 发布新版本（维护者）
+
+在本机仓库根目录运行 `.\release.ps1 -Version 1.0.25`：改版本号并推送，本机编译 APK（用发布密钥签名并核对）和 Windows 版，等云端 macOS 版编译测试通过后下载 dmg，最后创建 GitHub Release 并上传。加 `-NoUpload` 只打包不发布。
+
+- 发布密钥不在仓库里，默认放在 `D:\EasyClash\signing`（`keystore.properties` + `easyclash-release.jks`），也可以用环境变量 `EASYCLASH_KEYSTORE_PROPS` 指定。**丢了密钥就再也发不出能覆盖升级的版本，务必异地备份。**
+- 需要 GitHub 命令行工具：`winget install --id GitHub.cli`，然后 `gh auth login`。
 
 ### 要点
 
