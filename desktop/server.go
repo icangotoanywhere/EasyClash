@@ -140,7 +140,7 @@ func (s *Server) state() map[string]any {
 	st["isAdmin"] = isAdmin()
 	st["dataDir"] = a.dataDir
 	st["crash"] = crash
-	st["allRegions"] = regionsJSON(allRegions, nil)
+	st["allRegions"] = regionsJSON(allRegions)
 	return st
 }
 
