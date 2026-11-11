@@ -43,8 +43,6 @@ type Settings struct {
 	ExtraRules         string   `json:"extraRules"`
 	OverrideYaml       string   `json:"overrideYaml"`
 	MixedPort          int      `json:"mixedPort"`
-	BackupKeyword      string   `json:"backupKeyword"`   // 名字含此关键字的节点视为备用（如经 CDN 中转的节点）；空 = 不分级
-	BackupPenaltyMs    int      `json:"backupPenaltyMs"` // 优先节点比备用慢超过这么多毫秒才改用备用
 	TestIntervalMin    int      `json:"testIntervalMin"` // 自动测速 / 自动选节点的周期（分钟）
 	AutoStart          bool     `json:"autoStart"`       // 开机自动启动
 	AutoConnect        bool     `json:"autoConnect"`     // 启动后自动连接
@@ -61,7 +59,7 @@ func defaultSettings() Settings {
 	return Settings{
 		Mode: "rule", AppProxyMode: "all", AppList: []string{},
 		BlockQuic: true, BingDirect: true, DirectFallback: true, TunStack: "gvisor", LogLevel: "info",
-		MixedPort: 17890, GeoAutoUpdate: true, BackupKeyword: "中转", BackupPenaltyMs: 100, TestIntervalMin: 2,
+		MixedPort: 17890, GeoAutoUpdate: true, TestIntervalMin: 2,
 	}
 }
 

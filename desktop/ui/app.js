@@ -130,14 +130,6 @@ async function act(path, body, okMsg) {
 const setSetting = (patch, okMsg) => act('settings', patch, okMsg);
 
 // ======================= 通用控件 =======================
-// 备用节点关键字输入框下方的"当前效果"说明（与安卓版 AdvancedScreen.kt 一致）：只有空格也按留空处理
-function backupKeywordEffect(raw) {
-  const kw = (raw || '').trim();
-  if (!kw && raw) return '当前效果：只填了空格，保存时会去掉，等同留空——不分级，同一地区所有节点只按延迟挑最快的。';
-  if (!kw) return '当前效果：不分级，同一地区所有节点只按延迟挑最快的。';
-  const tail = kw !== raw ? '（首尾空格保存时会自动去掉）' : '';
-  return `当前效果：名字含「${kw}」的节点作备用，其余为优先${tail}。某地区没有这类节点时，该地区不分级。`;
-}
 function helpText(text, cls) { return h('div', { class: 'help ' + (cls || '') }, text); }
 function kv(k, v, id) { return h('div', { class: 'kv' }, h('span', { class: 'k' }, k), h('span', { class: 'v', id }, v)); }
 function btn(text, onClick, variant, disabled) {
@@ -185,17 +177,12 @@ function confirmDialog(title, text, confirmText, onConfirm) {
 
 // ======================= 数据 =======================
 function regionByGroup(name) { return (S.st && S.st.allRegions || []).find((r) => r.groupName === name); }
-// 「·优先」「·备用」是「·自动」下面的两级，名字只差后缀
-function tierSuffix(name) { return name.endsWith('·优先') ? '·优先' : name.endsWith('·备用') ? '·备用' : ''; }
-function regionByAnyGroup(name) { const sfx = tierSuffix(name); return regionByGroup(sfx ? name.slice(0, -sfx.length) + '·自动' : name); }
-// 本软件生成的地区相关策略组：🌍 地区选择、各地区的 ·自动 / ·优先 / ·备用
-function isRegionGroup(name) { return name === '🌍 地区选择' || !!regionByAnyGroup(name); }
+// 本软件生成的地区相关策略组：🌍 地区选择、各地区的 ·自动
+function isRegionGroup(name) { return name === '🌍 地区选择' || !!regionByGroup(name); }
 // 把内核里的策略组名换成界面显示用的名字（地区组用显示名，其余原样）
 function displayGroup(name) {
-  const r = regionByAnyGroup(name);
-  if (!r) return name;
-  const sfx = tierSuffix(name);
-  return sfx ? r.displayGroupName.slice(0, -'·自动'.length) + sfx : r.displayGroupName;
+  const r = regionByGroup(name);
+  return r ? r.displayGroupName : name;
 }
 function resolveLeaf(start) {
   let cur = start;
@@ -402,7 +389,7 @@ function pageHome() {
   } else {
     const chips = [chip('不锁定', !set.lockedRegion, () => act('region/lock', { code: '' }))];
     for (const r of st.regions) {
-      // 分级地区的自动组下面还有一层，沿着一路找到真实节点取延迟
+      // 沿着策略组一路找到真实节点取延迟
       const leaf = S.px[resolveLeaf(r.groupName)];
       const delay = leaf ? leaf.delay : 0;
       chips.push(chip(`${r.flag} ${r.displayName}` + (delay > 0 ? ` ${delay}ms` : ''), set.lockedRegion === r.code, () => act('region/lock', { code: r.code })));
@@ -418,14 +405,8 @@ function pageHome() {
       : '选中一个地区后，这里会多出一个只测该地区的按钮。「测速全部地区」会把所有地区都测一遍，各地区各自切到最快节点。', 'mt4'));
     if (locked) {
       reg.append(h('div', { class: 'mt8' }), kv('锁定地区', `${locked.flag} ${locked.displayName}`));
-      if (locked.tiered) {
-        const tier = S.px[locked.groupName] && S.px[locked.groupName].now;
-        reg.append(kv('当前层级', tier && tier.endsWith('·备用') ? '备用（优先节点明显更慢时才用）' : '优先'));
-      }
       reg.append(kv('实际节点', resolveLeaf(locked.groupName)),
-        helpText(locked.tiered
-          ? `每 ${set.testIntervalMin || 2} 分钟把优先、备用两级都测一次：优先里最快的比备用慢超过 ${set.backupPenaltyMs} ms 才用备用（高级页可改）。手动测速立即生效。`
-          : `每 ${set.testIntervalMin || 2} 分钟自动测速一次并切到最快节点（高级页可改）；手动测速立即生效。`));
+        helpText(`每 ${set.testIntervalMin || 2} 分钟自动测速一次并切到最快节点（高级页可改）；手动测速立即生效。`));
     }
   }
   out.push(reg);
@@ -581,7 +562,6 @@ function pageNodes() {
         '• ★ 主组：订阅的总开关，选中哪一项，代理流量就走哪一项。\n' +
         '• 主组里可以选单个节点，也可以选一个子组（如「自动选择」「🌍 地区选择」），再由子组决定具体节点。\n' +
         '• 「🌍 地区选择」是本软件自动生成的，里面每个地区都会自动选该地区最快的节点。每个能选代理的组末尾都多了这一项，首页的「代理出口地区」就是一次性把它们都切过去的快捷入口。\n' +
-        '• 「·自动」下面若还有「·优先」「·备用」两级：备用是名字含关键字（默认「中转」）的节点，只在优先节点明显更慢时才用（高级页可改）。这里手动点选哪一级，下个测速周期会被自动结果覆盖。\n' +
         '• 带「自动」「故障转移」字样的组由内核自动选择，不能手动指定具体节点。\n' +
         '• 延迟（ms）越小越快；「超时」表示这个节点当前不可用。\n' +
         '• 锁定地区时，所有当前走代理的组都会切到「🌍 地区选择」；选的是另一个组（如「🚀 节点选择」）或直连的不动，前者会跟着那个组走。\n' +
@@ -828,39 +808,18 @@ function pageAdvanced() {
       '有些境外网站按规则是直连的（例如微软服务，或订阅规则没覆盖到、事先说不清会不会被墙的境外地址），偶尔会连不上。开启后：\n\n• 规则让它直连、而目标在境外时，如果直连连不上（超时、被拒绝、域名解析失败），自动改走代理再试一次。走的是首页选的出口地区（没锁定地区时走订阅的主策略组）。\n• 同一个网站失败过一次就记住，本次连接期间直接走代理，不再先试直连，只慢第一次。断开重连后重新判断。\n• 国内网站（在国内网站列表里，或 IP 在国内）直连失败按正常失败处理，不重试；局域网地址也不重试。\n\n只会「直连失败改走代理」，反过来绝不会：代理连不上时宁可打不开，也不会偷偷改用直连，避免你的真实 IP 暴露给 Claude、Google 等服务。\n\n局限：只能发现「连不上」。已经连上、之后才被掐断或限速的情况发现不了；UDP（如 QUIC）也不在此列。哪些网站被改走了代理，可以在内核日志里看到（带 [EasyClash] 字样）。\n\n首页选了「直连」模式时不起作用。',
       (v) => setSetting({ directFallback: v }))));
 
-  // ---- 自动选节点：优先 / 备用 ----
+  // ---- 自动测速 ----
   const ivInput = h('input', { type: 'number', min: 1, max: 1440, value: draft('testIv', String(set.testIntervalMin || 2)), oninput: (e) => { drafts.testIv = e.target.value; } });
-  const kwEffect = helpText('', 'mt4');
-  const showKwEffect = (raw) => { kwEffect.textContent = backupKeywordEffect(raw); };
-  const kwInput = h('input', { type: 'text', maxlength: 20, placeholder: '留空 = 不分级，所有节点只按延迟选', value: draft('backupKw', set.backupKeyword || ''), oninput: (e) => { drafts.backupKw = e.target.value; showKwEffect(e.target.value); } });
-  showKwEffect(kwInput.value);
-  const penInput = h('input', { type: 'number', min: 0, max: 5000, value: draft('backupPen', String(set.backupPenaltyMs ?? 100)), oninput: (e) => { drafts.backupPen = e.target.value; } });
-  out.push(card('自动测速与选节点',
-    '【自动测速间隔】锁定地区后，每隔这么多分钟把该地区的节点测一遍，自动换到最快的（分级时同时判断用优先还是备用）。一次测速每个节点只发一个很小的请求，21 个节点约 10 KB 流量，可以放心设短一些；建议 1～10 分钟。\n\n' +
-    '【优先 / 备用】有些节点测延迟很快，真用起来却经常卡（典型的是经 CDN「中转」的节点：到 CDN 很近，但 CDN 再回机场源站那一段不稳）。纯按延迟挑，总是会选中它们。\n\n' +
-    '开启分级后，每个地区的「·自动」组会拆成两级：\n' +
-    '• 优先：名字不含关键字的节点，平时一律在这里面挑最快的\n' +
-    '• 备用：名字含关键字的节点\n\n' +
-    '每个测速周期把两级都测一遍：只有当「优先」里最快的节点比「备用」里最快的还慢超过设定毫秒数时，才改用备用；优先节点恢复后自动切回。优先级全部超时也会自动用备用。\n\n' +
-    '关键字留空 = 不分级，纯按延迟选。如果你的机场「中转」节点质量很好，就把关键字清掉。',
+  out.push(card('自动测速',
+    '锁定地区后，每隔这么多分钟把该地区的节点测一遍，自动换到最快的。一次测速每个节点只发一个很小的请求，21 个节点约 10 KB 流量，可以放心设短一些；建议 1～10 分钟。',
     h('label', { class: 'field' }, '自动测速间隔（分钟）'),
-    ivInput,
-    helpText('默认 2。锁定地区时每隔这么久自动重测并切到最快节点。', 'mb8'),
-    helpText('名字含关键字的节点降为备用，只在其他节点明显更慢时才用。', 'mb8'),
-    h('label', { class: 'field mt12' }, '备用节点关键字'),
-    kwInput,
-    kwEffect,
-    h('label', { class: 'field mt12' }, '优先比备用慢多少毫秒才用备用'),
-    h('div', { class: 'row' }, h('div', { class: 'grow' }, penInput), btn('保存', () => {
-      const p = parseInt(drafts.backupPen ?? penInput.value, 10);
-      if (!(p >= 0 && p <= 5000)) { toast('毫秒数要在 0～5000 之间'); return; }
+    h('div', { class: 'row' }, h('div', { class: 'grow' }, ivInput), btn('保存', () => {
       const iv = parseInt(drafts.testIv ?? ivInput.value, 10);
       if (!(iv >= 1 && iv <= 1440)) { toast('测速间隔要在 1～1440 分钟之间'); return; }
-      const kw = (drafts.backupKw ?? kwInput.value).trim();
-      delete drafts.backupKw; delete drafts.backupPen; delete drafts.testIv;
-      setSetting({ backupKeyword: kw, backupPenaltyMs: p, testIntervalMin: iv }, '已保存');
+      delete drafts.testIv;
+      setSetting({ testIntervalMin: iv }, '已保存');
     }, 'outlined')),
-    helpText('默认 100：优先节点 250ms、备用 100ms → 慢了 150ms，超过 100 → 用备用；优先 180ms、备用 100ms → 只慢 80ms → 仍用优先。', 'mt4')));
+    helpText('默认 2。锁定地区时每隔这么久自动重测并切到最快节点。', 'mt4')));
 
   // ---- 附加规则 ----
   const rules = h('textarea', { class: 'mono', placeholder: 'DOMAIN-SUFFIX,example.com,DIRECT', oninput: (e) => { drafts.rules = e.target.value; } });

@@ -90,13 +90,12 @@ type regionJSON struct {
 	DisplayName      string `json:"displayName"`
 	GroupName        string `json:"groupName"`
 	DisplayGroupName string `json:"displayGroupName"`
-	Tiered           bool   `json:"tiered"`
 }
 
-func regionsJSON(rs []*Region, tiered map[string]bool) []regionJSON {
+func regionsJSON(rs []*Region) []regionJSON {
 	out := []regionJSON{}
 	for _, r := range rs {
-		out = append(out, regionJSON{r.Code, r.Flag, r.DisplayName(), r.GroupName(), r.DisplayGroupName(), tiered[r.Code]})
+		out = append(out, regionJSON{r.Code, r.Flag, r.DisplayName(), r.GroupName(), r.DisplayGroupName()})
 	}
 	return out
 }
@@ -105,7 +104,7 @@ func (s *Server) state() map[string]any {
 	a := s.app
 	a.mu.Lock()
 	st := map[string]any{
-		"status": a.status, "error": a.lastErr, "mainGroup": a.mainGroup, "regions": regionsJSON(a.regions, a.tiered),
+		"status": a.status, "error": a.lastErr, "mainGroup": a.mainGroup, "regions": regionsJSON(a.regions),
 		"sysProxyOn": a.sysProxyOn, "tunOn": a.tunOn, "busy": a.busy > 0, "pendingImport": a.pendingImport,
 		"nodeWarn": a.nodeWarn, "nodeChecking": a.nodeChecking,
 	}
@@ -148,7 +147,7 @@ func (s *Server) state() map[string]any {
 // 改了这些设置不需要重载内核配置
 var noReloadKeys = map[string]bool{
 	"autoStart": true, "autoConnect": true, "geoAutoUpdate": true, "geoLastCheck": true, "geoLastAttempt": true,
-	"lockedRegion": true, "mode": true, "selectedSubId": true, "backupPenaltyMs": true,
+	"lockedRegion": true, "mode": true, "selectedSubId": true,
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {

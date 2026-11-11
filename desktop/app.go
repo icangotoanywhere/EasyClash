@@ -42,7 +42,6 @@ type App struct {
 	secret        string
 	mainGroup     string
 	regions       []*Region
-	tiered        map[string]bool // 分了优先/备用两级的地区
 	sysProxyOn    bool
 	tunOn         bool
 	busy          int
@@ -177,15 +176,6 @@ func (a *App) nodeCheck(api *CoreAPI) string {
 	if st.LockedRegion != "" && st.Mode != "global" {
 		for _, r := range regions {
 			if r.Code == st.LockedRegion {
-				if a.isTiered(r.Code) {
-					// 分级地区：两级都测，顺带按"优先比备用慢多少"选好该用的那一级
-					res := a.tierPick(api, r)
-					appendLog("[APP] 分级选择 " + res.describe(r, st.BackupPenaltyMs))
-					if res.PrimaryMin <= 0 && res.BackupMin <= 0 {
-						return "锁定的「" + r.Flag + " " + r.DisplayName() + "」节点全部连不上（测速超时）。" + nodeWarnTail
-					}
-					return ""
-				}
 				// 测整个地区组：内核只返回测通了的节点，一个都没有就是全部连不上（顺带切到该地区最快的节点）
 				if res := api.GroupDelay(r.GroupName()); len(res) == 0 {
 					return "锁定的「" + r.Flag + " " + r.DisplayName() + "」节点全部连不上（测速超时）。" + nodeWarnTail
@@ -367,7 +357,7 @@ func (a *App) doConnect() error {
 
 	a.mu.Lock()
 	a.api, a.ctlAddr, a.secret = api, ctl, secret
-	a.mainGroup, a.regions, a.tiered = res.MainGroup, res.Regions, res.Tiered
+	a.mainGroup, a.regions = res.MainGroup, res.Regions
 	a.tunOn = tun
 	a.mu.Unlock()
 	a.applyRegionLock(api, res.MainGroup)
@@ -562,7 +552,7 @@ func (a *App) teardown(reason string) {
 	}
 	coreStop()
 	a.mu.Lock()
-	a.api, a.ctlAddr, a.secret, a.mainGroup, a.regions, a.tiered = nil, "", "", "", nil, nil
+	a.api, a.ctlAddr, a.secret, a.mainGroup, a.regions = nil, "", "", "", nil
 	a.sysProxyOn, a.tunOn = false, false
 	a.nodeWarn, a.nodeChecking = "", false
 	a.mu.Unlock()
@@ -634,7 +624,7 @@ func (a *App) doReload() error {
 		return err
 	}
 	a.mu.Lock()
-	a.mainGroup, a.regions, a.tiered, a.tunOn = res.MainGroup, res.Regions, res.Tiered, tun
+	a.mainGroup, a.regions, a.tunOn = res.MainGroup, res.Regions, tun
 	a.mu.Unlock()
 	a.applyRegionLock(api, res.MainGroup)
 
@@ -684,7 +674,6 @@ func (a *App) startMaintenance(api *CoreAPI, checkGeo bool) {
 				return true
 			}
 		}
-		go a.tierLoop(api, sleep)
 		// 0. 节点可用性检查（连接 / 重载后 3 秒）
 		if !sleep(3 * time.Second) {
 			return
@@ -852,13 +841,7 @@ func (a *App) TestRegion(code string) (string, error) {
 	if px, err := api.Proxies(); err == nil {
 		before = resolveLeaf(px, region.GroupName())
 	}
-	if a.isTiered(code) {
-		// 分级地区：两级都测，并按"优先比备用慢多少"决定用哪一级
-		res := a.tierPick(api, region)
-		appendLog("[APP] 手动测速 " + res.describe(region, a.store.Settings().BackupPenaltyMs))
-	} else {
-		api.GroupDelay(region.GroupName())
-	}
+	api.GroupDelay(region.GroupName())
 	// 内核对自动组的"最快"结果有几秒缓存，稍等再取最终选择
 	time.Sleep(1500 * time.Millisecond)
 	after := ""

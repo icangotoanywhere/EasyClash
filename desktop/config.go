@@ -35,7 +35,6 @@ type buildResult struct {
 	Path      string
 	MainGroup string
 	Regions   []*Region
-	Tiered    map[string]bool // 哪些地区分了「优先 / 备用」两级（地区代码）
 }
 
 // normalize 把 yaml.v3 解出来的 map[interface{}]interface{} 统一成 map[string]any
@@ -174,9 +173,6 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 	}
 
 	var created []*Region
-	tiered := map[string]bool{}
-	tierSel := map[string]bool{}
-	keyword := strings.TrimSpace(st.BackupKeyword)
 	interval := testIntervalSec(st)
 	for _, region := range allRegions {
 		if existing[region.GroupName()] {
@@ -192,29 +188,7 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 		if len(matched) == 0 && len(providerNames) == 0 {
 			continue
 		}
-		// 分级：名字含备用关键字的节点单独一组。两边都有节点才分，否则就是普通的一个自动组
-		var primary, backup []any
-		for _, n := range matched {
-			if keyword != "" && strings.Contains(strings.ToLower(str(n)), strings.ToLower(keyword)) {
-				backup = append(backup, n)
-			} else {
-				primary = append(primary, n)
-			}
-		}
-		useTiers := keyword != "" && len(backup) > 0 && (len(primary) > 0 || len(providerNames) > 0)
-		if !useTiers {
-			groups = append(groups, urlTestGroup(region.GroupName(), matched, providerNames, region.Pattern, infoNodePattern, interval))
-		} else {
-			kw := regexEscape(keyword)
-			rp := strings.TrimPrefix(region.Pattern, "(?i)")
-			// 优先组：该地区所有不含关键字的节点；备用组：该地区含关键字的节点
-			groups = append(groups, urlTestGroup(region.PrimaryGroup(), primary, providerNames, region.Pattern, "(?i)"+infoNodePattern+"|"+kw, interval))
-			groups = append(groups, urlTestGroup(region.BackupGroup(), backup, providerNames, "(?i)(?:"+rp+").*(?:"+kw+")|(?:"+kw+").*(?:"+rp+")", infoNodePattern, interval))
-			// 自动组本身变成一个选择组，由 tier.go 按"优先比备用慢多少"决定选哪一级
-			groups = append(groups, map[string]any{"name": region.GroupName(), "type": "select", "proxies": []any{region.PrimaryGroup(), region.BackupGroup()}})
-			tiered[region.Code] = true
-			tierSel[region.GroupName()] = true
-		}
+		groups = append(groups, urlTestGroup(region.GroupName(), matched, providerNames, region.Pattern, infoNodePattern, interval))
 		existing[region.GroupName()] = true
 		created = append(created, region)
 	}
@@ -278,8 +252,7 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 		nonProxy := map[string]bool{"DIRECT": true, "REJECT": true, "REJECT-DROP": true, "PASS": true, "COMPATIBLE": true}
 		for _, g := range groups {
 			name := str(g["name"])
-			// 分级地区的「·自动」选择组是地区选择的下级，加进去会形成环
-			if name == regionSelector || !isSelect(g) || tierSel[name] {
+			if name == regionSelector || !isSelect(g) {
 				continue
 			}
 			list := asList(g["proxies"])
@@ -464,7 +437,7 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return nil, err
 	}
-	return &buildResult{Path: path, MainGroup: mainGroup, Regions: created, Tiered: tiered}, nil
+	return &buildResult{Path: path, MainGroup: mainGroup, Regions: created}, nil
 }
 
 func defaultDNS(ipv6, tun bool) map[string]any {

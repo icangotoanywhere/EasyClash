@@ -18,10 +18,6 @@ type Region struct {
 // GroupName 内核里自动测速组的名字，例如 "🇸🇬 新加坡·自动"（内核侧保持不变）
 func (r *Region) GroupName() string { return r.Flag + " " + r.Name + "·自动" }
 
-// PrimaryGroup / BackupGroup 分级时「·自动」下面的两个子组：优先节点组、备用节点组（见 tier.go）
-func (r *Region) PrimaryGroup() string { return r.Flag + " " + r.Name + "·优先" }
-func (r *Region) BackupGroup() string  { return r.Flag + " " + r.Name + "·备用" }
-
 // DisplayName 界面上显示的地区名：港澳台显示为「中国香港」「中国澳门」「中国台湾」
 func (r *Region) DisplayName() string {
 	switch r.Code {

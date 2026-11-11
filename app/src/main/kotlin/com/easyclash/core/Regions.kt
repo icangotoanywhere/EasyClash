@@ -15,9 +15,6 @@ data class Region(
 ) {
     /** 内核里自动测速组的名字，例如 "🇸🇬 新加坡·自动"（内核侧保持不变） */
     val groupName: String get() = "$flag $name·自动"
-    /** 分级时的两个子组：优先节点组、备用节点组（见 ConfigBuilder / TierPicker） */
-    val primaryGroup: String get() = "$flag $name·优先"
-    val backupGroup: String get() = "$flag $name·备用"
 
     /** 界面上显示的地区名：港澳台显示为「中国香港」「中国澳门」「中国台湾」。name 仍用于识别节点名和内核组名 */
     val displayName: String get() = if (code in CHINA_SAR) "中国$name" else name
@@ -81,15 +78,13 @@ object Regions {
     fun displayName(kernelName: String): String {
         for (r in all) {
             if (kernelName == r.groupName) return r.displayGroupName
-            if (kernelName == r.primaryGroup) return "${r.flag} ${r.displayName}·优先"
-            if (kernelName == r.backupGroup) return "${r.flag} ${r.displayName}·备用"
         }
         return kernelName
     }
 
-    /** 是不是本软件生成的地区相关策略组（🌍 地区选择、各地区的 ·自动 / ·优先 / ·备用） */
+    /** 是不是本软件生成的地区相关策略组（🌍 地区选择、各地区的 ·自动） */
     fun isRegionGroup(name: String): Boolean =
-        name == ConfigBuilder.REGION_SELECTOR || all.any { name == it.groupName || name == it.primaryGroup || name == it.backupGroup }
+        name == ConfigBuilder.REGION_SELECTOR || all.any { name == it.groupName }
 
     /** 判断一个节点属于哪个地区。先按国旗/中文名精确匹配，再用正则。 */
     fun match(nodeName: String): Region? {

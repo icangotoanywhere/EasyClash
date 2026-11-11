@@ -9,7 +9,6 @@ import com.easyclash.EasyClashApp
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.RegionLock
 import com.easyclash.core.Regions
-import com.easyclash.core.TierPicker
 import com.easyclash.data.AppInfo
 import com.easyclash.data.ConnectionItem
 import com.easyclash.data.ProxyItem
@@ -60,7 +59,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val proxies: StateFlow<Map<String, ProxyItem>> = _proxies
     val mainGroup: String get() = VpnState.mainGroup
     val regionGroups get() = VpnState.regionGroups
-    fun isTiered(code: String?) = VpnState.isTiered(code)
 
     private var pollJob: Job? = null
 
@@ -142,14 +140,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val region = regionGroups.firstOrNull { it.code == code } ?: run { say("当前订阅里没有这个地区"); return@launch }
         _busy.value = true
         val before = resolveLeafName(region.groupName)
-        if (VpnState.isTiered(code)) {
-            // 分级地区：两级都测，并按"优先比备用慢多少"决定用哪一级
-            val penalty = settings.value.backupPenaltyMs
-            val r = runCatching { TierPicker.run(api, region, penalty) }.getOrNull()
-            if (r != null) VpnState.appendLog("[APP] 手动测速 " + r.describe(region, penalty))
-        } else {
-            runCatching { api.groupDelay(region.groupName) }
-        }
+        runCatching { api.groupDelay(region.groupName) }
         refreshProxies()
         // 内核对自动组的"最快"结果有几秒缓存，稍等再刷一次拿到最终选择
         delay(1500)
