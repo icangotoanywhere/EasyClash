@@ -1,18 +1,25 @@
-# 云端编译检查：push / 手动运行 → 产物在 Artifacts。
-# 正式发布改为在本机完成（仓库根目录 release.ps1）：APK 和 Windows 版在本机编译并用本机的发布密钥签名，
-# macOS 版只能在 Mac 上编译，所以仍由这里的 macos 任务编译并测试，release.ps1 再把它下载下来一起上传。
-# 这里编出来的 APK 用的是云端临时的 debug 签名，只用于检查能否编译，不要发给用户。
+# 云端编译与发布：push / 手动运行 → 产物在 Artifacts；推到 main 且版本号是新的 → 自动打 tag、发布 Release，
+# 附上安卓 APK、Windows 版 zip、macOS 版 dmg（macOS 版先在云端的 Mac 上自动测试，通过了才发布）。
+#
+# 安卓版签名：用仓库 Secrets 里的发布密钥（与维护者本机 D:\EasyClash\signing 里的是同一把），
+# 签完核对证书指纹，对得上才会发布。没配 Secrets（例如别人 fork 的仓库）时退回临时 debug 签名，只编译、不发布。
+# 需要的 Secrets：ANDROID_KEYSTORE_B64（.jks 的 base64）、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD
 name: Build
 
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
-  contents: write   # 推送 ci-logs-* 日志分支要用
+  contents: write
 
 env:
+  # 发布密钥证书的 SHA-256 指纹（小写、无冒号）。云端签出的 APK 必须是这个证书，否则不发布
+  RELEASE_CERT_SHA256: ada95c194e88ce73bf7bea727b02a8231496fa96ec87935e50c3860321b5a861
   # 与本地编译验证过的版本保持一致（core/core.go 用到了它的地理数据库更新接口）
   MIHOMO_VERSION: v1.19.33
 
@@ -166,6 +173,8 @@ jobs:
   # ---------- 安卓版 ----------
   build:
     runs-on: ubuntu-latest
+    outputs:
+      signed: ${{ steps.verify.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -211,6 +220,21 @@ jobs:
             curl -fsSL -o app/src/main/assets/$f https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/$f || true
           done
 
+      - name: Set up release signing key
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::warning title=没有发布密钥::仓库 Secrets 里没有 ANDROID_KEYSTORE_B64，本次用临时 debug 签名，只编译、不发布"
+            exit 0
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$RUNNER_TEMP/release.jks" "$KS_PASS" "$KEY_ALIAS" "$KEY_PASS" > "$RUNNER_TEMP/keystore.properties"
+          echo "EASYCLASH_KEYSTORE_PROPS=$RUNNER_TEMP/keystore.properties" >> "$GITHUB_ENV"
+
       - name: Build APK
         run: |
           chmod +x gradlew
@@ -222,7 +246,105 @@ jobs:
           fi
           cp app/build/outputs/apk/release/app-release.apk EasyClash-${GITHUB_REF_NAME}.apk
 
+      # 核对 APK 的签名证书：是发布密钥才算"已签名"，后面的 apk 分支和 Release 只在这种情况下发布
+      - name: Verify APK signature
+        id: verify
+        run: |
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | tee "$RUNNER_TEMP/certs.txt"
+          got=$(grep -m1 'certificate SHA-256 digest' "$RUNNER_TEMP/certs.txt" | awk '{print $NF}' | tr 'A-F' 'a-f')
+          if [ "$got" = "$RELEASE_CERT_SHA256" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=APK 已用发布密钥签名::$got"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=APK 不是发布密钥签名::$got，不会发布"
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: easyclash-apk
           path: EasyClash-*.apk
+
+      # 推到 main 时把 APK 放到一个独立的 apk 分支（只保留最新一份），不用登录也能用 git 拉到，方便直接发到手机
+      - name: Publish APK to branch "apk"
+        if: github.ref == 'refs/heads/main' && steps.verify.outputs.signed == 'true'
+        run: |
+          ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          d=$(mktemp -d)
+          cp app/build/outputs/apk/release/app-release.apk "$d/EasyClash-$ver.apk"
+          cd "$d"
+          git init -q -b apk
+          git -c user.name=github-actions -c user.email=actions@github.com add -A
+          git -c user.name=github-actions -c user.email=actions@github.com commit -qm "EasyClash $ver APK（源码 ${GITHUB_SHA::7}）"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk:apk
+
+  # ---------- 发布：三个平台都编译成功（macOS 版还要通过自动测试）才发布，保证 README 里三个"最新版"直链总是同一个版本 ----------
+  release:
+    runs-on: ubuntu-latest
+    needs: [windows, macos, build]
+    if: needs.build.outputs.signed == 'true' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: easyclash-apk
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: easyclash-windows
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: easyclash-macos
+
+      # 推到 main：版本号来自 build.gradle.kts 的 versionName。标签不存在就创建并发布 Release；已存在则更新该 Release 的文件
+      - name: Read version
+        id: ver
+        run: |
+          ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "tag=v$ver" >> "$GITHUB_OUTPUT"
+          [ -f "EasyClash-v$ver.apk" ] || cp "EasyClash-${GITHUB_REF_NAME}.apk" "EasyClash-v$ver.apk"
+          # 再各放一份固定文件名的副本，README 里的直链 releases/latest/download/EasyClash.apk 等才能永远指向最新版
+          cp "EasyClash-v$ver.apk" EasyClash.apk
+          [ -f "EasyClash-Windows-v$ver.zip" ] && cp "EasyClash-Windows-v$ver.zip" EasyClash-Windows.zip || echo "::warning::本次没有 Windows 版"
+          [ -f "EasyClash-macOS-v$ver.dmg" ] && cp "EasyClash-macOS-v$ver.dmg" EasyClash-macOS.dmg || echo "::warning::本次没有 macOS 版"
+          ls -la
+          # 发布说明：有 release-notes/v版本号.md 就用它，否则用本次推送的提交说明（去掉署名行）
+          if [ -f "release-notes/v$ver.md" ]; then cp "release-notes/v$ver.md" "$RUNNER_TEMP/notes.md"
+          else git log -1 --format=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > "$RUNNER_TEMP/notes.md" || true; fi
+          # 推到 main 时，这个版本号已经发布过就不再覆盖（只改文档、没改版本号的推送不会发新版）
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && git ls-remote --exit-code --tags origin "refs/tags/v$ver" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=不发布::v$ver 已经发布过；要发新版请先改 app/build.gradle.kts 里的版本号"
+          fi
+
+      - name: Publish Release (push to main)
+        if: github.ref == 'refs/heads/main' && steps.ver.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: EasyClash ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          body_path: ${{ runner.temp }}/notes.md
+          files: |
+            EasyClash-v*.apk
+            EasyClash-Windows-*.zip
+            EasyClash-macOS-*.dmg
+            EasyClash.apk
+            EasyClash-Windows.zip
+            EasyClash-macOS.dmg
+          make_latest: true
+
+      # 推 v* 标签，或在网页上 Publish release，都会把文件挂到对应 Release 上
+      - name: Attach files to Release (tag / web release)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            EasyClash-v*.apk
+            EasyClash-Windows-*.zip
+            EasyClash-macOS-*.dmg
+          generate_release_notes: true
