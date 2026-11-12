@@ -11,7 +11,6 @@ package core
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"strings"
 	"sync"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/metacubex/mihomo/component/dialer"
 	"github.com/metacubex/mihomo/component/geodata"
-	"github.com/metacubex/mihomo/component/process"
 	"github.com/metacubex/mihomo/component/updater"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/hub"
@@ -97,50 +95,6 @@ func SetProtector(p SocketProtector) {
 			}
 		})
 	}
-}
-
-// PackageResolver is implemented on the Android side: given a connection's addresses as the
-// app saw them, it returns the owning app's package name ("" if unknown). Android 10+ only
-// (ConnectivityManager.getConnectionOwnerUid). Used by PROCESS-NAME rules and the
-// "proxy only" guard in fallback.go. With the cmfa build tag the core never looks up
-// processes itself; it asks this resolver.
-type PackageResolver interface {
-	FindPackage(network string, srcIP string, srcPort int32, dstIP string, dstPort int32) string
-}
-
-// SetPackageResolver registers (or clears, with nil) the connection-owner lookup.
-func SetPackageResolver(r PackageResolver) {
-	if r == nil {
-		process.DefaultPackageNameResolver = nil
-		return
-	}
-	process.DefaultPackageNameResolver = func(m *C.Metadata) (string, error) {
-		// 用应用看到的原始地址查（fake-ip 模式下目标是假地址，内核随后会清掉 DstIP，所以优先用 Raw*）
-		srcIP, srcPort := addrOf(m.RawSrcAddr, m.SrcIP.String(), int(m.SrcPort))
-		dstIP, dstPort := addrOf(m.RawDstAddr, m.DstIP.String(), int(m.DstPort))
-		if srcIP == "" || dstIP == "" || dstIP == "invalid IP" {
-			return "", errors.New("connection address unknown")
-		}
-		pkg := r.FindPackage(m.NetWork.String(), srcIP, int32(srcPort), dstIP, int32(dstPort))
-		if pkg == "" {
-			return "", errors.New("owner not found")
-		}
-		return pkg, nil
-	}
-}
-
-func addrOf(a net.Addr, ip string, port int) (string, int) {
-	switch v := a.(type) {
-	case *net.TCPAddr:
-		if v != nil {
-			return v.IP.String(), v.Port
-		}
-	case *net.UDPAddr:
-		if v != nil {
-			return v.IP.String(), v.Port
-		}
-	}
-	return ip, port
 }
 
 // Start boots the core. homeDir is the working directory (geo databases, cache);

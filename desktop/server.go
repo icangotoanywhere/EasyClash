@@ -188,12 +188,7 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		raw, _ := json.Marshal(body)
 		var autoStartChanged bool
 		before := a.store.Settings()
-		after := a.store.Update(func(st *Settings) {
-			if _, ok := body["appRoutes"]; ok {
-				st.AppRoutes = nil // 整体替换（json 解到已有的 map 里只会合并，删不掉旧项）
-			}
-			_ = json.Unmarshal(raw, st)
-		})
+		after := a.store.Update(func(st *Settings) { _ = json.Unmarshal(raw, st) })
 		if before.AutoStart != after.AutoStart {
 			autoStartChanged = true
 		}

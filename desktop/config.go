@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -14,7 +13,7 @@ import (
 // 把"机场订阅 + 用户设置"合成内核真正加载的最终配置。与安卓版 ConfigBuilder.kt 的逻辑一致：
 //  1. 去掉订阅里与本机环境冲突的字段（端口、tun、控制接口等），换成我们自己的
 //  2. 按地区自动生成 "🇸🇬 新加坡·自动" 这类测速组和一个 "🌍 地区选择" 组
-//  3. 规则：插入分程序走法 / QUIC 拦截 / 用户附加规则 / AI 域名强制代理；在线规则集与地理数据库固定走代理下载；订阅没带规则时补基础分流
+//  3. 规则：插入分程序规则 / QUIC 拦截 / 用户附加规则 / 国际 AI 服务强制走代理；在线规则集与地理数据库固定走代理下载；订阅没带规则时补基础分流
 //  4. 应用高级页的 YAML 覆写
 //  5. 系统代理模式不开 TUN；TUN 模式（管理员）开启内核自带的虚拟网卡
 
@@ -24,8 +23,8 @@ const (
 	geoMirrorHost     = "testingcf.jsdelivr.net"
 )
 
-// 「AI 服务强制走代理」的域名（含所有子域名）。与安卓版 ConfigBuilder.kt 的 AI_DOMAINS 保持一致。
-// 这些域名一律走主组、并由 fallback.go 禁止直连：规则、订阅策略组、直连模式都不能让它们直连。
+// 「国际 AI 服务强制走代理」的域名（含所有子域名）。与安卓版 ConfigBuilder.kt 的 AI_DOMAINS 保持一致。
+// 这些域名有规则指向主组，并由 fallback.go 禁止直连：万一要直连就改走主组，主组不可用就拒绝。
 var aiDomains = []string{
 	"openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "sora.com",
 	"anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com",
@@ -326,41 +325,46 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 		}
 	}
 
-	// 分程序走法（按程序文件名）。顺序：仅直连的程序 → 屏蔽 QUIC → 仅代理的程序 → 用户附加规则 → AI 域名 → 微软走国内 → …… → 订阅规则
-	var directApps, proxyApps []string
-	for name, route := range st.AppRoutes {
-		name = strings.TrimSpace(name)
-		if name == "" || strings.ContainsAny(name, ",()") {
-			continue
-		}
-		switch route {
-		case "direct":
-			directApps = append(directApps, name)
-		case "proxy":
-			proxyApps = append(proxyApps, name)
-		}
-	}
-	sort.Strings(directApps)
-	sort.Strings(proxyApps)
-	var aiList []string
-	if st.AIForceProxy {
-		aiList = aiDomains
-	}
 	var front []string
-	for _, a := range directApps {
-		front = append(front, "PROCESS-NAME,"+a+",DIRECT")
+	// 分程序代理（按进程名）：排除的程序永远直连；"仅选中"时其余程序一律直连
+	var apps []string
+	for _, a := range st.AppList {
+		a = strings.TrimSpace(a)
+		if a != "" && !strings.ContainsAny(a, ",()") {
+			apps = append(apps, a)
+		}
+	}
+	if len(apps) > 0 {
+		switch st.AppProxyMode {
+		case "deny":
+			for _, a := range apps {
+				front = append(front, "PROCESS-NAME,"+a+",DIRECT")
+			}
+		case "allow":
+			if len(apps) == 1 {
+				front = append(front, "NOT,((PROCESS-NAME,"+apps[0]+")),DIRECT")
+			} else {
+				var sub []string
+				for _, a := range apps {
+					sub = append(sub, "(PROCESS-NAME,"+a+")")
+				}
+				front = append(front, "NOT,((OR,("+strings.Join(sub, ",")+"))),DIRECT")
+			}
+		}
 	}
 	if st.BlockQuic {
 		front = append(front, "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT")
 	}
-	for _, a := range proxyApps {
-		front = append(front, "PROCESS-NAME,"+a+","+mainGroup)
-	}
+	// 顺序：分程序 → 屏蔽 QUIC → 用户附加规则 → 国际 AI 服务 → 微软走国内 → …… → 订阅规则
 	for _, line := range strings.Split(st.ExtraRules, "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" && !strings.HasPrefix(line, "#") {
 			front = append(front, line)
 		}
+	}
+	var aiList []string
+	if st.AIForceProxy {
+		aiList = aiDomains
 	}
 	for _, d := range aiList {
 		front = append(front, "DOMAIN-SUFFIX,"+d+","+mainGroup)
@@ -415,16 +419,11 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 	cfg["secret"] = secret
 	cfg["unified-delay"] = true
 	cfg["tcp-concurrent"] = true
-	// 有「仅代理」的程序时，每条连接都查一次属于哪个程序（全局 / 直连模式不走规则，也要能拦住直连）
-	if len(proxyApps) > 0 {
-		cfg["find-process-mode"] = "always"
-	} else {
-		cfg["find-process-mode"] = "strict"
-	}
-	// 「仅代理」保护：这些程序和域名的连接由内核侧（fallback.go）禁止直连
+	cfg["find-process-mode"] = "strict"
+	// 国际 AI 服务强制走代理：这些域名准备直连时，由内核侧（fallback.go）改走主组，主组不可用就拒绝
 	delete(cfg, "easyclash-proxy-only")
-	if len(proxyApps) > 0 || len(aiList) > 0 {
-		cfg["easyclash-proxy-only"] = map[string]any{"apps": proxyApps, "domains": aiList}
+	if len(aiList) > 0 {
+		cfg["easyclash-proxy-only"] = map[string]any{"via": mainGroup, "domains": aiList}
 	}
 	cfg["geodata-mode"] = false
 	cfg["geo-auto-update"] = false

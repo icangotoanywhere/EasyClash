@@ -12,9 +12,10 @@ package main
 // 改走哪个代理由配置里的 easyclash-direct-fallback 指定（界面侧写入：有地区选择组就用它，即
 // 首页选的出口地区，否则用主组）；没有这一项就是关闭。
 //
-// 同一个包装还负责"仅代理"保护：配置里 easyclash-proxy-only 列出的 App（安卓包名，内核按连接查出
-// 所属 App 后填在 metadata.Process）和域名（AI 服务等），它们的连接一律不准直连——无论规则写了什么、
-// 策略组里选的是不是直连、首页是不是直连模式。代理不通就连不上，绝不暴露真实 IP。
+// 同一个包装还负责「国际 AI 服务强制走代理」：配置里 easyclash-proxy-only 列出的域名（含子域名），
+// 它们的连接一律不准直连——无论规则写了什么、策略组里选的是不是直连、首页是不是直连模式。
+// 要直连的这类连接改走 via 指定的代理组（主组，即首页选的出口地区）；代理组当前选的也是直连 / 拒绝时
+// 就拒绝连接。只比域名，不查连接属于哪个 App，没有额外开销。
 
 import (
 	"context"
@@ -36,7 +37,7 @@ import (
 
 const (
 	fallbackKey  = "easyclash-direct-fallback"
-	proxyOnlyKey = "easyclash-proxy-only" // {apps: [包名...], domains: [域名...]}
+	proxyOnlyKey = "easyclash-proxy-only" // {via: 代理组, domains: [域名...]}
 )
 
 type fallbackCtxKey struct{}
@@ -49,7 +50,7 @@ var (
 	learned   = map[string]bool{} // 本次运行中直连失败过、已改走代理的网站
 )
 
-// installDirectFallback 在 ApplyConfig 之前调用：按配置给 DIRECT 装上"失败转代理"和"仅代理"保护。
+// installDirectFallback 在 ApplyConfig 之前调用：按配置给 DIRECT 装上"失败转代理"和"AI 服务不准直连"。
 func installDirectFallback(cfg *config.Config, raw []byte) {
 	var opt map[string]any
 	_ = yaml.Unmarshal(raw, &opt)
@@ -71,11 +72,11 @@ func installDirectFallback(cfg *config.Config, raw []byte) {
 			log.Warnln("[EasyClash] 出境直连失败转代理：找不到策略组 %s，未启用", name)
 		}
 	}
-	guard := parseProxyOnly(opt[proxyOnlyKey])
-	if !guard.empty() {
-		log.Infoln("[EasyClash] 仅代理保护：%d 个应用、%d 个域名的连接不允许直连", len(guard.apps), len(guard.domains))
+	guard := parseProxyOnly(opt[proxyOnlyKey], cfg.Proxies)
+	if len(guard.domains) > 0 {
+		log.Infoln("[EasyClash] 国际 AI 服务强制走代理：%d 个域名不允许直连", len(guard.domains))
 	}
-	if via == nil && guard.empty() {
+	if via == nil && len(guard.domains) == 0 {
 		dp.ProxyAdapter = inner
 		return
 	}
@@ -91,21 +92,17 @@ type directFallback struct {
 	guard proxyOnly
 }
 
-// proxyOnly 不允许直连的应用与域名
+// proxyOnly 不允许直连的域名
 type proxyOnly struct {
-	apps    map[string]bool // 小写包名 / 进程名
-	domains []string        // 小写域名，匹配它本身及所有子域名
+	via     C.Proxy  // 这类连接改走的代理组；nil 或当前选的是直连 / 拒绝时直接拒绝
+	domains []string // 小写域名，匹配它本身及所有子域名
 }
 
-func parseProxyOnly(v any) proxyOnly {
-	g := proxyOnly{apps: map[string]bool{}}
+func parseProxyOnly(v any, proxies map[string]C.Proxy) proxyOnly {
+	var g proxyOnly
 	m, _ := v.(map[string]any)
-	if list, ok := m["apps"].([]any); ok {
-		for _, x := range list {
-			if s := strings.ToLower(strings.TrimSpace(fmt.Sprint(x))); s != "" {
-				g.apps[s] = true
-			}
-		}
+	if name, _ := m["via"].(string); name != "" {
+		g.via = proxies[name]
 	}
 	if list, ok := m["domains"].([]any); ok {
 		for _, x := range list {
@@ -117,13 +114,8 @@ func parseProxyOnly(v any) proxyOnly {
 	return g
 }
 
-func (g proxyOnly) empty() bool { return len(g.apps) == 0 && len(g.domains) == 0 }
-
-// blocks 这条连接是否属于"仅代理"：返回原因（应用或域名），空串表示不属于
+// blocks 这条（准备直连的）连接的域名是否在名单里：返回命中的域名，空串表示不在
 func (g proxyOnly) blocks(m *C.Metadata) string {
-	if m.Process != "" && g.apps[strings.ToLower(m.Process)] {
-		return "应用 " + m.Process
-	}
 	for _, host := range []string{m.Host, m.SniffHost} {
 		host = strings.ToLower(strings.TrimSuffix(host, "."))
 		if host == "" {
@@ -131,28 +123,45 @@ func (g proxyOnly) blocks(m *C.Metadata) string {
 		}
 		for _, d := range g.domains {
 			if host == d || strings.HasSuffix(host, "."+d) {
-				return "域名 " + d
+				return d
 			}
 		}
 	}
 	return ""
 }
 
-func (d *directFallback) refuse(m *C.Metadata, why string) error {
-	log.Infoln("[EasyClash] 仅代理：拒绝直连 %s（%s）", m.RemoteAddress(), why)
-	return fmt.Errorf("EasyClash 仅代理：%s 不允许直连", why)
+// guardVia 这类连接改走的代理组：组存在、且当前实际选的不是直连 / 拒绝时才返回
+func (d *directFallback) guardVia(m *C.Metadata) C.Proxy {
+	if d.guard.via != nil && usable(d.guard.via, m) {
+		return d.guard.via
+	}
+	return nil
+}
+
+func (d *directFallback) refuse(m *C.Metadata, domain string) error {
+	log.Infoln("[EasyClash] 国际 AI 服务强制走代理：%s（%s）不允许直连，代理组当前不可用，已拒绝", m.RemoteAddress(), domain)
+	return fmt.Errorf("EasyClash：%s 不允许直连", domain)
 }
 
 func (d *directFallback) ListenPacketContext(ctx context.Context, m *C.Metadata) (C.PacketConn, error) {
-	if why := d.guard.blocks(m); why != "" {
-		return nil, d.refuse(m, why)
+	if dom := d.guard.blocks(m); dom != "" {
+		via := d.guardVia(m)
+		if via == nil || ctx.Value(fallbackCtxKey{}) != nil {
+			return nil, d.refuse(m, dom)
+		}
+		return via.ListenPacketContext(context.WithValue(ctx, fallbackCtxKey{}, true), m)
 	}
 	return d.ProxyAdapter.ListenPacketContext(ctx, m)
 }
 
 func (d *directFallback) DialContext(ctx context.Context, m *C.Metadata) (C.Conn, error) {
-	if why := d.guard.blocks(m); why != "" {
-		return nil, d.refuse(m, why)
+	if dom := d.guard.blocks(m); dom != "" {
+		via := d.guardVia(m)
+		if via == nil || ctx.Value(fallbackCtxKey{}) != nil { // 已经是改道后又绕回直连：拒绝，防止死循环
+			return nil, d.refuse(m, dom)
+		}
+		log.Debugln("[EasyClash] %s（%s）不允许直连，改走 %s", m.RemoteAddress(), dom, via.Name())
+		return via.DialContext(context.WithValue(ctx, fallbackCtxKey{}, true), m)
 	}
 	if d.via == nil || ctx.Value(fallbackCtxKey{}) != nil || tunnel.Mode() == tunnel.Direct {
 		return d.ProxyAdapter.DialContext(ctx, m)
@@ -188,8 +197,11 @@ func (d *directFallback) viaDial(ctx context.Context, m *C.Metadata) (C.Conn, er
 }
 
 // viaUsable 代理那一侧当前实际选中的不是直连 / 拒绝时才有意义
-func (d *directFallback) viaUsable(m *C.Metadata) bool {
-	var p C.Proxy = d.via
+func (d *directFallback) viaUsable(m *C.Metadata) bool { return usable(d.via, m) }
+
+// usable 沿策略组一路看下去，最终实际选中的是真正的代理节点（不是直连 / 拒绝）
+func usable(start C.Proxy, m *C.Metadata) bool {
+	var p C.Proxy = start
 	for i := 0; p != nil && i < 16; i++ {
 		switch p.Type() {
 		case C.Direct, C.Reject, C.RejectDrop, C.Pass, C.Compatible:

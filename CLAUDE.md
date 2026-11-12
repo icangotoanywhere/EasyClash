@@ -25,9 +25,8 @@ App 与内核之间：启动时生成完整的 mihomo YAML，之后切节点、�
 | 锁定出口地区 | `core/RegionLock.kt`、`vpn/EasyClashVpnService.kt` | `app.go` |
 | 设置项（含默认值、JSON 字段名） | `data/Models.kt` | `store.go`（`server.go` 的设置白名单也要同步） |
 | 界面文字 | `ui/screens/*.kt` | `desktop/ui/app.js` |
-| 出境直连失败转代理 + 「仅代理」禁止直连 | `core/fallback.go` | `desktop/fallback.go`（**逐字相同，只有包名不同**） |
-| AI 服务强制走代理的域名表 | `core/ConfigBuilder.kt` 的 `AI_DOMAINS` | `config.go` 的 `aiDomains`（界面说明用的副本在 `ui/app.js` 的 `AI_DOMAINS`） |
-| 分应用 / 分程序走法（仅直连 / 按规则 / 仅代理）与一键推荐 | `ui/screens/AppsScreen.kt`、`data/AppRecommend.kt`、`vpn/AppOwner.kt` | `ui/app.js` 的 `pageApps`、`REC_DIRECT` / `REC_PROXY` |
+| 出境直连失败转代理 + 国际 AI 服务禁止直连 | `core/fallback.go` | `desktop/fallback.go`（**逐字相同，只有包名不同**） |
+| 国际 AI 服务强制走代理的域名表 | `core/ConfigBuilder.kt` 的 `AI_DOMAINS` | `config.go` 的 `aiDomains`（界面说明用的副本在 `ui/app.js` 的 `AI_DOMAINS`） |
 
 删功能时，在全仓库 grep 相关字段名、函数名和中文说明文字，确认两边、界面、README 都清干净。v1.0.25 删除「优先 / 备用」分级时，就因为漏改了 `server.go` 里的一处调用，导致编译失败。
 
@@ -53,12 +52,9 @@ App 与内核之间：启动时生成完整的 mihomo YAML，之后切节点、�
 - **`unified-delay: true`**：只计连接建好后的第二次请求，各协议的握手开销不计入，让 SS / Trojan / VLESS / Hysteria2 等不同协议之间的比较公平。不要关。
 - **v1.0.25 去掉了「备用节点关键字 / 优先·备用分级」**（原本用来把「中转」节点降级），判断为没有必要。旧版本保存的 `backupKeyword`、`backupPenaltyMs` 设置会被忽略。
 - **出境直连失败自动转代理**：只做「直连 → 代理」这一个方向，代理失败绝不改走直连（避免暴露真实 IP）。
-- **分应用走法（v1.0.28）**：每个 App / 程序三选一，界面顺序固定为「仅直连 / 按规则 / 仅代理」（按规则居中），只存非「按规则」的项。没有「优先代理 / 优先直连」：评估后认为「按规则」加「直连失败转代理」已覆盖。
-  - 仅直连：安卓移出 VPN 隧道（`addDisallowedApplication`）；电脑版 `PROCESS-NAME,x,DIRECT`。
-  - 仅代理：`PROCESS-NAME,x,<主组>`，并写进配置 `easyclash-proxy-only`，由 `fallback.go` 在 DIRECT 出口处拒绝——规则、订阅组里选了直连、直连模式都漏不出去。此时 `find-process-mode: always`。安卓靠 `core.go` 的 `PackageResolver`（Kotlin `AppOwner` 调 `getConnectionOwnerUid`），**只支持安卓 10+**。
-  - 规则顺序：（电脑版仅直连）→ 屏蔽 QUIC → 仅代理 → 用户附加规则 → AI 域名 → 微软走国内 → …… → 订阅规则。
-  - 一键推荐**只用内置名单，不接任何 AI**（维护者决定：不上传用户的 App 列表）。原则：国内银行证券支付、社交办公、生活政务 → 仅直连；海外 AI → 仅代理；吃不准的 → 按规则。
-- **AI 服务强制走代理（v1.0.28，默认开）**：`AI_DOMAINS` 里的域名走主组，同样进 `easyclash-proxy-only` 禁止直连；浏览器里也受保护。
+- **国际 AI 服务强制走代理（v1.0.29，默认开）**：`AI_DOMAINS` 里的域名有 `DOMAIN-SUFFIX` 规则指向主组，并写进配置 `easyclash-proxy-only`（`via` 主组、`domains`），由 `fallback.go` 在 DIRECT 出口处拦截：万一要直连就改走主组，主组当前也是直连 / 拒绝就拒绝。只比域名，不查连接属于哪个 App。规则顺序：屏蔽 QUIC → 用户附加规则 → 国际 AI 服务 → 微软走国内 → …… → 订阅规则（电脑版分程序规则在最前）。
+- **教训：不要按连接查所属 App。** v1.0.28 做过「每个 App 三选一（仅直连 / 按规则 / 仅代理）+ 一键推荐」，「仅代理」靠 `find-process-mode: always` 和规则最前面的 `PROCESS-NAME`，每条连接都要跨进程问一次安卓系统，用户反馈手机变卡；维护者决定 v1.0.29 整体退回 1.0.27 的分应用方式（全部 / 仅选中 / 排除选中），只保留按域名的「国际 AI 服务强制走代理」。1.0.28 保存的设置在 `Models.kt` / `store.go` 里换算回来（仅直连 → 排除名单）。以后若再做按 App 的强制代理，只能在准备直连时按需查，并先在真机上确认不卡。
+- 一键推荐之类的功能**不接任何 AI**（维护者决定：不上传用户的 App 列表）。
 - **内核版本**：mihomo 固定为 `v1.19.33`（`build.yml` 的 `MIHOMO_VERSION`、`desktop/go.mod`）。电脑版的 `core.go` 用到了它的地理数据库更新接口，升级内核要两边一起测。`core/go.mod` 里写的 v1.19.12 已经过时，编译时会被 CI 覆盖。
 
 ## 验证
