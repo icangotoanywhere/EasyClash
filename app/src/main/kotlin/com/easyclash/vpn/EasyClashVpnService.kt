@@ -17,6 +17,7 @@ import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
 import com.easyclash.core.RegionLock
 import com.easyclash.data.AppProxyMode
+import com.easyclash.data.ProxyMode
 import com.easyclash.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -24,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -40,7 +42,10 @@ class EasyClashVpnService : VpnService() {
         const val ACTION_START = "com.easyclash.START"
         const val ACTION_STOP = "com.easyclash.STOP"
         const val ACTION_RELOAD = "com.easyclash.RELOAD"
-        private const val CHANNEL = "easyclash_vpn"
+        const val ACTION_TEST = "com.easyclash.TEST"
+        // 渠道一旦创建，重要级别就改不了，所以换了新 ID。旧渠道 easyclash_vpn 是"低重要级"，很多系统不在锁屏显示
+        private const val CHANNEL = "easyclash_status"
+        private const val OLD_CHANNEL = "easyclash_vpn"
         private const val NOTIFY_ID = 1
         const val CONTROLLER_PORT = 16090
         private const val GEO_CHECK_INTERVAL = 7L * 24 * 3600 * 1000   // 地理数据库每 7 天检查一次
@@ -52,6 +57,7 @@ class EasyClashVpnService : VpnService() {
         }
         fun stop(ctx: Context) { ctx.startService(Intent(ctx, EasyClashVpnService::class.java).setAction(ACTION_STOP)) }
         fun reload(ctx: Context) { ctx.startService(Intent(ctx, EasyClashVpnService::class.java).setAction(ACTION_RELOAD)) }
+        fun test(ctx: Context) { ctx.startService(Intent(ctx, EasyClashVpnService::class.java).setAction(ACTION_TEST)) }
     }
 
     // 单线程调度：连接 / 重载 / 停止 串行执行，避免互相打架
@@ -64,10 +70,19 @@ class EasyClashVpnService : VpnService() {
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var maintJob: Job? = null
 
+    // 通知栏显示的内容：当前节点、最近一次延迟、实时速度。节点信息每 10 秒从内核刷新一次
+    private var nodeJob: Job? = null
+    @Volatile private var nodeTitle: String? = null      // 例如 "🇯🇵 日本 · 东京 03"
+    @Volatile private var nodeDelay: String = ""          // 例如 "延迟 85 ms"
+    @Volatile private var leafName: String? = null        // 当前实际出口节点名（内核里的名字）
+    @Volatile private var trafficText: String = ""
+    @Volatile private var testing = false
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { scope.launch { stopEverything("收到断开指令") } ; return START_NOT_STICKY }
             ACTION_RELOAD -> { scope.launch { reloadConfig() }; return START_STICKY }
+            ACTION_TEST -> { testFromNotification(); return START_STICKY }
             else -> {
                 if (VpnState.status.value == Status.CONNECTED || VpnState.status.value == Status.CONNECTING) return START_STICKY
                 val n = buildNotification("正在连接…")
@@ -135,6 +150,7 @@ class EasyClashVpnService : VpnService() {
             VpnState.setStatus(Status.CONNECTED)
             updateNotification("已连接 · ${sub.name}")
             startTrafficMonitor(api)
+            startNodeMonitor(api)
             startMaintenance(api)
         } catch (e: Throwable) {
             VpnState.appendLog("[APP] 启动失败：${e.message}")
@@ -194,7 +210,8 @@ class EasyClashVpnService : VpnService() {
         trafficWs = api.trafficSocket(
             onData = { up, down ->
                 VpnState.setTraffic(up, down)
-                updateNotification("↑ ${human(up)}/s   ↓ ${human(down)}/s")
+                trafficText = "↑ ${human(up)}/s   ↓ ${human(down)}/s"
+                pushNotification()
             },
             onClosed = { }
         )
@@ -216,6 +233,7 @@ class EasyClashVpnService : VpnService() {
             VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
             updateNotification("已连接 · ${sub.name}")
+            startNodeMonitor(api)
             startMaintenance(api, checkGeo = false)
         } catch (e: Throwable) {
             VpnState.setError("重载配置失败：${friendly(e)}")
@@ -260,6 +278,8 @@ class EasyClashVpnService : VpnService() {
         VpnState.appendLog("[APP] 断开：$reason")
         VpnState.setStatus(Status.STOPPING)
         maintJob?.cancel(); maintJob = null
+        nodeJob?.cancel(); nodeJob = null
+        nodeTitle = null; nodeDelay = ""; leafName = null; trafficText = ""; testing = false
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null
         withContext(Dispatchers.IO) { runCatching { core.Core.stop() } }
@@ -284,22 +304,111 @@ class EasyClashVpnService : VpnService() {
     }
 
     // ---------------- 通知 ----------------
-    private fun buildNotification(text: String): Notification {
+    /** 当前节点 + 延迟。锁定了地区时前面带上地区名；直连模式显示"直连" */
+    private fun startNodeMonitor(api: CoreApi) {
+        nodeJob?.cancel()
+        nodeJob = bgScope.launch {
+            while (isActive) {
+                refreshNodeInfo(api)
+                delay(10_000)
+            }
+        }
+    }
+
+    private suspend fun refreshNodeInfo(api: CoreApi) {
+        val s = EasyClashApp.instance.store.settings.value
+        if (s.mode == ProxyMode.DIRECT) {
+            nodeTitle = "直连模式（不走代理）"; nodeDelay = ""; leafName = null
+            pushNotification(); return
+        }
+        // 沿策略组一路找到真实节点
+        var name = if (s.mode == ProxyMode.GLOBAL) "GLOBAL" else VpnState.mainGroup
+        var leaf: com.easyclash.data.ProxyItem? = null
+        for (hop in 1..8) {   // 最多跟 8 层，防止策略组互相引用时死循环
+            val p = runCatching { api.proxy(name) }.getOrNull() ?: break
+            leaf = p
+            name = p.now ?: break
+        }
+        val found = leaf ?: return
+        leafName = found.name
+        val shown = when (found.name) { "DIRECT" -> "直连"; "REJECT" -> "拒绝"; else -> found.name }
+        val region = lockedRegion(s.lockedRegion)
+        nodeTitle = if (region != null) "${region.flag} ${region.displayName} · $shown" else shown
+        nodeDelay = when {
+            found.name == "DIRECT" || found.name == "REJECT" -> ""
+            found.delay > 0 -> "延迟 ${found.delay} ms"
+            !found.alive -> "延迟 超时"
+            else -> "延迟 未测"
+        }
+        pushNotification()
+    }
+
+    private fun lockedRegion(code: String?) = code?.let { c -> VpnState.regionGroups.firstOrNull { it.code == c } }
+
+    /** 通知栏"测速"按钮：锁定了地区就重测该地区的自动组（内核会按结果切到最快节点），否则只测当前节点 */
+    private fun testFromNotification() {
+        val api = VpnState.api ?: return
+        if (VpnState.status.value != Status.CONNECTED || testing) return
+        bgScope.launch {
+            testing = true
+            pushNotification()
+            val before = leafName
+            val region = lockedRegion(EasyClashApp.instance.store.settings.value.lockedRegion)
+            try {
+                if (region != null) {
+                    runCatching { api.groupDelay(region.groupName) }
+                    delay(1500)   // 内核对自动组的"最快"结果有几秒缓存，稍等再取最终选择
+                } else {
+                    before?.let { n -> runCatching { api.delay(n) } }
+                }
+            } finally {
+                testing = false
+            }
+            refreshNodeInfo(api)
+            val after = leafName
+            VpnState.appendLog(
+                "[APP] 通知栏测速" + (region?.let { " ${it.flag} ${it.displayName}" } ?: "") + "：" +
+                    (if (before != null && after != null && before != after) "已从「$before」切换到「$after」，" else "") + nodeDelay
+            )
+        }
+    }
+
+    /** 连接后的常驻通知：标题是节点，正文是延迟和速度 */
+    private fun pushNotification() {
+        if (VpnState.status.value != Status.CONNECTED) return   // 断开过程中迟到的回调不能把通知又挂回去
+        val title = nodeTitle ?: return
+        val body = listOf(if (testing) "测速中…" else nodeDelay, trafficText).filter { it.isNotBlank() }.joinToString("   ")
+        runCatching { getSystemService(NotificationManager::class.java).notify(NOTIFY_ID, buildNotification(body, title, withTest = true)) }
+    }
+
+    private fun buildNotification(text: String, title: String = "EasyClash", withTest: Boolean = false): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW))
+            // 默认重要级才会在锁屏显示；关掉声音和振动，速度每秒刷新也不会打扰
+            val ch = NotificationChannel(CHANNEL, getString(R.string.notification_channel), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            nm.createNotificationChannel(ch)
+            runCatching { nm.deleteNotificationChannel(OLD_CHANNEL) }
         }
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getBroadcast(this, 1, Intent(this, StopReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
-        return Notification.Builder(this, CHANNEL)
+        val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("EasyClash")
+            .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null, "断开", stop).build())
-            .build()
+            .setVisibility(Notification.VISIBILITY_PUBLIC)   // 锁屏上显示完整内容（节点、延迟、速度）
+        if (withTest) {
+            val test = PendingIntent.getBroadcast(this, 2, Intent(this, TestReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
+            b.addAction(Notification.Action.Builder(null, if (testing) "测速中…" else "测速", test).build())
+        }
+        return b.addAction(Notification.Action.Builder(null, "断开", stop).build()).build()
     }
 
     private fun updateNotification(text: String) {
@@ -341,4 +450,9 @@ class EasyClashVpnService : VpnService() {
 /** 通知栏"断开"按钮 */
 class StopReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) { EasyClashVpnService.stop(context) }
+}
+
+/** 通知栏"测速"按钮 */
+class TestReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) { EasyClashVpnService.test(context) }
 }

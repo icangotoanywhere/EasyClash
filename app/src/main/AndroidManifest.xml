@@ -75,6 +75,10 @@
         <receiver
             android:name=".vpn.StopReceiver"
             android:exported="false" />
+        <!-- 通知栏"测速"按钮 -->
+        <receiver
+            android:name=".vpn.TestReceiver"
+            android:exported="false" />
 
         <!-- 系统下拉菜单的快捷设置磁贴 -->
         <service
