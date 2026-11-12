@@ -11,11 +11,17 @@ package main
 // DIRECT 对象。配置解析之后、生效之前，把这个对象里的出站换成带重试的包装，一处替换处处生效。
 // 改走哪个代理由配置里的 easyclash-direct-fallback 指定（界面侧写入：有地区选择组就用它，即
 // 首页选的出口地区，否则用主组）；没有这一项就是关闭。
+//
+// 同一个包装还负责"仅代理"保护：配置里 easyclash-proxy-only 列出的 App（安卓包名，内核按连接查出
+// 所属 App 后填在 metadata.Process）和域名（AI 服务等），它们的连接一律不准直连——无论规则写了什么、
+// 策略组里选的是不是直连、首页是不是直连模式。代理不通就连不上，绝不暴露真实 IP。
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
+	"strings"
 	"sync"
 
 	"github.com/metacubex/mihomo/adapter"
@@ -28,7 +34,10 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const fallbackKey = "easyclash-direct-fallback"
+const (
+	fallbackKey  = "easyclash-direct-fallback"
+	proxyOnlyKey = "easyclash-proxy-only" // {apps: [包名...], domains: [域名...]}
+)
 
 type fallbackCtxKey struct{}
 
@@ -40,41 +49,112 @@ var (
 	learned   = map[string]bool{} // 本次运行中直连失败过、已改走代理的网站
 )
 
-// installDirectFallback 在 ApplyConfig 之前调用：按配置里的开关给 DIRECT 装上"失败转代理"。
+// installDirectFallback 在 ApplyConfig 之前调用：按配置给 DIRECT 装上"失败转代理"和"仅代理"保护。
 func installDirectFallback(cfg *config.Config, raw []byte) {
 	var opt map[string]any
 	_ = yaml.Unmarshal(raw, &opt)
-	name, _ := opt[fallbackKey].(string)
-	if name == "" {
-		return
-	}
 	dp, ok := cfg.Proxies["DIRECT"].(*adapter.Proxy)
 	if !ok {
-		return
-	}
-	via, ok := cfg.Proxies[name]
-	if !ok {
-		log.Warnln("[EasyClash] 出境直连失败转代理：找不到策略组 %s，未启用", name)
 		return
 	}
 	inner := dp.ProxyAdapter
 	if w, ok := inner.(*directFallback); ok { // 防止重复包装
 		inner = w.ProxyAdapter
 	}
-	dp.ProxyAdapter = &directFallback{ProxyAdapter: inner, via: via}
+
+	var via C.Proxy
+	if name, _ := opt[fallbackKey].(string); name != "" {
+		if p, ok := cfg.Proxies[name]; ok {
+			via = p
+			log.Infoln("[EasyClash] 出境直连失败自动转代理：已开启，改走 %s", name)
+		} else {
+			log.Warnln("[EasyClash] 出境直连失败转代理：找不到策略组 %s，未启用", name)
+		}
+	}
+	guard := parseProxyOnly(opt[proxyOnlyKey])
+	if !guard.empty() {
+		log.Infoln("[EasyClash] 仅代理保护：%d 个应用、%d 个域名的连接不允许直连", len(guard.apps), len(guard.domains))
+	}
+	if via == nil && guard.empty() {
+		dp.ProxyAdapter = inner
+		return
+	}
+	dp.ProxyAdapter = &directFallback{ProxyAdapter: inner, via: via, guard: guard}
 	learnedMu.Lock()
 	learned = map[string]bool{}
 	learnedMu.Unlock()
-	log.Infoln("[EasyClash] 出境直连失败自动转代理：已开启，改走 %s", name)
 }
 
 type directFallback struct {
 	C.ProxyAdapter
-	via C.Proxy
+	via   C.Proxy // 直连失败时改走的代理；nil = 不转
+	guard proxyOnly
+}
+
+// proxyOnly 不允许直连的应用与域名
+type proxyOnly struct {
+	apps    map[string]bool // 小写包名 / 进程名
+	domains []string        // 小写域名，匹配它本身及所有子域名
+}
+
+func parseProxyOnly(v any) proxyOnly {
+	g := proxyOnly{apps: map[string]bool{}}
+	m, _ := v.(map[string]any)
+	if list, ok := m["apps"].([]any); ok {
+		for _, x := range list {
+			if s := strings.ToLower(strings.TrimSpace(fmt.Sprint(x))); s != "" {
+				g.apps[s] = true
+			}
+		}
+	}
+	if list, ok := m["domains"].([]any); ok {
+		for _, x := range list {
+			if s := strings.ToLower(strings.Trim(strings.TrimSpace(fmt.Sprint(x)), ".")); s != "" {
+				g.domains = append(g.domains, s)
+			}
+		}
+	}
+	return g
+}
+
+func (g proxyOnly) empty() bool { return len(g.apps) == 0 && len(g.domains) == 0 }
+
+// blocks 这条连接是否属于"仅代理"：返回原因（应用或域名），空串表示不属于
+func (g proxyOnly) blocks(m *C.Metadata) string {
+	if m.Process != "" && g.apps[strings.ToLower(m.Process)] {
+		return "应用 " + m.Process
+	}
+	for _, host := range []string{m.Host, m.SniffHost} {
+		host = strings.ToLower(strings.TrimSuffix(host, "."))
+		if host == "" {
+			continue
+		}
+		for _, d := range g.domains {
+			if host == d || strings.HasSuffix(host, "."+d) {
+				return "域名 " + d
+			}
+		}
+	}
+	return ""
+}
+
+func (d *directFallback) refuse(m *C.Metadata, why string) error {
+	log.Infoln("[EasyClash] 仅代理：拒绝直连 %s（%s）", m.RemoteAddress(), why)
+	return fmt.Errorf("EasyClash 仅代理：%s 不允许直连", why)
+}
+
+func (d *directFallback) ListenPacketContext(ctx context.Context, m *C.Metadata) (C.PacketConn, error) {
+	if why := d.guard.blocks(m); why != "" {
+		return nil, d.refuse(m, why)
+	}
+	return d.ProxyAdapter.ListenPacketContext(ctx, m)
 }
 
 func (d *directFallback) DialContext(ctx context.Context, m *C.Metadata) (C.Conn, error) {
-	if ctx.Value(fallbackCtxKey{}) != nil || tunnel.Mode() == tunnel.Direct {
+	if why := d.guard.blocks(m); why != "" {
+		return nil, d.refuse(m, why)
+	}
+	if d.via == nil || ctx.Value(fallbackCtxKey{}) != nil || tunnel.Mode() == tunnel.Direct {
 		return d.ProxyAdapter.DialContext(ctx, m)
 	}
 	key := m.Host

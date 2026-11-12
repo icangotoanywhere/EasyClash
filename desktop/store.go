@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -27,10 +28,14 @@ func newSubscription(id, name, url string) *Subscription {
 
 // Settings 所有可持久化的设置。字段含义与安卓版一致，另加 Windows 专有项。
 type Settings struct {
-	SelectedSubID      string   `json:"selectedSubId"`
-	Mode               string   `json:"mode"`         // rule / global / direct
-	AppProxyMode       string   `json:"appProxyMode"` // all / allow / deny（按程序名分流）
-	AppList            []string `json:"appList"`
+	SelectedSubID string `json:"selectedSubId"`
+	Mode          string `json:"mode"` // rule / global / direct
+	// 每个程序的走法（键是程序文件名，如 chrome.exe / WeChat）："direct" 仅直连、"proxy" 仅代理；没列出的按规则
+	AppRoutes map[string]string `json:"appRoutes"`
+	// v1.0.27 及以前的分程序设置，只在升级换算时读取（见 openStore）
+	AppProxyMode       string   `json:"appProxyMode,omitempty"`
+	AppList            []string `json:"appList,omitempty"`
+	AIForceProxy       bool     `json:"aiForceProxy"` // AI 服务的域名一律走代理、绝不直连
 	LockedRegion       string   `json:"lockedRegion"` // 锁定的地区代码，如 "SG"，空表示不锁定
 	IPv6               bool     `json:"ipv6"`
 	BlockQuic          bool     `json:"blockQuic"`
@@ -57,7 +62,7 @@ type Settings struct {
 
 func defaultSettings() Settings {
 	return Settings{
-		Mode: "rule", AppProxyMode: "all", AppList: []string{},
+		Mode: "rule", AppRoutes: map[string]string{}, AIForceProxy: true,
 		BlockQuic: true, BingDirect: true, DirectFallback: true, TunStack: "gvisor", LogLevel: "info",
 		MixedPort: 17890, GeoAutoUpdate: true, TestIntervalMin: 2,
 	}
@@ -79,9 +84,19 @@ func openStore(dir string) *Store {
 	if b, err := os.ReadFile(filepath.Join(dir, "settings.json")); err == nil {
 		_ = json.Unmarshal(b, &s.settings)
 	}
-	if s.settings.AppList == nil {
-		s.settings.AppList = []string{}
+	if s.settings.AppRoutes == nil {
+		s.settings.AppRoutes = map[string]string{}
 	}
+	// 旧版换算（旧设置文件里才有 appProxyMode）：「排除选中的程序」→ 这些程序仅直连；
+	// 「仅选中的程序」无法逐个换算（不知道电脑上有哪些程序），改为全部按规则，发布说明里提醒用户重新设置
+	if s.settings.AppProxyMode == "deny" {
+		for _, a := range s.settings.AppList {
+			if a = strings.TrimSpace(a); a != "" {
+				s.settings.AppRoutes[a] = "direct"
+			}
+		}
+	}
+	s.settings.AppProxyMode, s.settings.AppList = "", nil
 	if b, err := os.ReadFile(filepath.Join(dir, "subs.json")); err == nil {
 		_ = json.Unmarshal(b, &s.subs)
 	}
@@ -109,7 +124,11 @@ func writeJSONAtomic(path string, v any) error {
 
 func copySettings(src Settings) Settings {
 	c := src
-	c.AppList = append([]string{}, src.AppList...)
+	c.AppRoutes = map[string]string{}
+	for k, v := range src.AppRoutes {
+		c.AppRoutes[k] = v
+	}
+	c.AppList = nil
 	c.RegionExempt = append([]string{}, src.RegionExempt...)
 	c.RegionSaved = map[string]string{}
 	for k, v := range src.RegionSaved {
@@ -130,8 +149,13 @@ func (s *Store) Update(f func(*Settings)) Settings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	f(&s.settings)
-	if s.settings.AppList == nil {
-		s.settings.AppList = []string{}
+	if s.settings.AppRoutes == nil {
+		s.settings.AppRoutes = map[string]string{}
+	}
+	for k, v := range s.settings.AppRoutes { // 只记"仅直连 / 仅代理"，其他值一律当作按规则删掉
+		if v != "direct" && v != "proxy" {
+			delete(s.settings.AppRoutes, k)
+		}
 	}
 	if s.settings.RegionSaved == nil {
 		s.settings.RegionSaved = map[string]string{}

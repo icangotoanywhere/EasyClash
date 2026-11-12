@@ -46,11 +46,11 @@ enum class ProxyMode(val coreValue: String, val label: String, val help: String)
     DIRECT("direct", "直连", "所有流量都不走代理，相当于关闭代理但保留 VPN 连接。"),
 }
 
-/** 分应用代理模式 */
-enum class AppProxyMode(val label: String, val help: String) {
-    ALL("全部应用", "手机上所有应用的流量都经过本软件。"),
-    ALLOW_LIST("仅选中的应用", "只有你勾选的应用走代理，其他应用正常直连，不受影响。"),
-    DENY_LIST("排除选中的应用", "勾选的应用不走代理，其余所有应用都走代理。适合排除银行、支付、国内视频等应用。"),
+/** 每个 App 的走法。界面上从左到右（窄屏从上到下）依次是 仅直连 / 按规则 / 仅代理 */
+enum class AppRoute(val label: String, val help: String) {
+    DIRECT_ONLY("仅直连", "完全不经过本软件，就像没开代理。适合银行、支付、微信等国内必备应用。"),
+    RULE("按规则", "国内网站直连、国外网站走代理（默认）。"),
+    PROXY_ONLY("仅代理", "所有连接都走代理，代理不通就连不上，绝不直连。适合 ChatGPT、Claude 等海外 AI。需要安卓 10 及以上。"),
 }
 
 /** TUN 网络栈 */
@@ -64,8 +64,12 @@ enum class TunStack(val coreValue: String, val label: String) {
 data class Settings(
     var selectedSubId: String? = null,
     var mode: ProxyMode = ProxyMode.RULE,
-    var appProxyMode: AppProxyMode = AppProxyMode.ALL,
-    var appList: MutableSet<String> = mutableSetOf(),
+    /** 每个 App 的走法，只记录不是「按规则」的 App */
+    var appRoutes: MutableMap<String, AppRoute> = mutableMapOf(),
+    /** 旧版「仅选中的应用」模式升级时待换算的名单：需要读取已安装应用后才能换算，见 Store.migrateLegacyAllowList */
+    var legacyAllowList: MutableSet<String>? = null,
+    /** ChatGPT、Claude 等 AI 服务的域名一律走代理、绝不直连（浏览器里用也受保护） */
+    var aiForceProxy: Boolean = true,
     var lockedRegion: String? = null,           // 锁定的地区代码，如 "SG"，null 表示不锁定
     var ipv6: Boolean = false,
     var blockQuic: Boolean = true,
@@ -89,8 +93,10 @@ data class Settings(
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("selectedSubId", selectedSubId ?: JSONObject.NULL)
-        put("mode", mode.name); put("appProxyMode", appProxyMode.name)
-        put("appList", JSONArray(appList.toList()))
+        put("mode", mode.name)
+        put("appRoutes", JSONObject().apply { appRoutes.forEach { (k, v) -> if (v != AppRoute.RULE) put(k, v.name) } })
+        legacyAllowList?.let { put("legacyAllowList", JSONArray(it.toList())) }
+        put("aiForceProxy", aiForceProxy)
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
         put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect); put("directFallback", directFallback)
@@ -108,9 +114,20 @@ data class Settings(
             val s = Settings()
             s.selectedSubId = if (o.isNull("selectedSubId")) null else o.optString("selectedSubId")
             s.mode = runCatching { ProxyMode.valueOf(o.optString("mode")) }.getOrDefault(ProxyMode.RULE)
-            s.appProxyMode = runCatching { AppProxyMode.valueOf(o.optString("appProxyMode")) }.getOrDefault(AppProxyMode.ALL)
-            val arr = o.optJSONArray("appList") ?: JSONArray()
-            s.appList = (0 until arr.length()).map { arr.getString(it) }.toMutableSet()
+            val routes = o.optJSONObject("appRoutes")
+            if (routes != null) {
+                routes.keys().forEach { k -> runCatching { AppRoute.valueOf(routes.getString(k)) }.getOrNull()?.let { if (it != AppRoute.RULE) s.appRoutes[k] = it } }
+                o.optJSONArray("legacyAllowList")?.let { a -> s.legacyAllowList = (0 until a.length()).map { a.getString(it) }.toMutableSet() }
+            } else {
+                // v1.0.27 及以前：全局三选一 + 一个名单，换算成每个 App 的走法
+                val arr = o.optJSONArray("appList") ?: JSONArray()
+                val list = (0 until arr.length()).map { arr.getString(it) }
+                when (o.optString("appProxyMode")) {
+                    "DENY_LIST" -> list.forEach { s.appRoutes[it] = AppRoute.DIRECT_ONLY }      // 排除的 → 仅直连
+                    "ALLOW_LIST" -> if (list.isNotEmpty()) s.legacyAllowList = list.toMutableSet()  // 名单外的 → 仅直连（待换算）
+                }
+            }
+            s.aiForceProxy = o.optBoolean("aiForceProxy", true)
             s.lockedRegion = if (o.isNull("lockedRegion")) null else o.optString("lockedRegion")
             s.ipv6 = o.optBoolean("ipv6", false)
             s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)

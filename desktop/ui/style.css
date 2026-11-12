@@ -197,4 +197,7 @@ label.field { display: block; font-size: 12.5px; color: var(--text-dim); margin:
 
 /* 节点页：按地区出口的策略组块（本软件生成），缩进 + 淡色底，和订阅自己的节点分开 */
 .region-block { background: rgba(255, 171, 64, .13); border: 1px solid rgba(255, 171, 64, .35); border-radius: 10px; padding: 6px 4px 4px; margin: 2px 0 8px; }
-@media (prefers-color-scheme: dark) { .region-block { background: rgba(255, 171, 64, .10); border-color: rgba(255, 171, 64, .28); } }
+@media (prefers-color-scheme: dark) { .region-block { background: rgba(255, 171, 64, .10); border-color: rgba(255, 171, 64, .28); } }/* 程序页每行的三选一：仅直连 / 按规则 / 仅代理 */
+.seg.seg-sm { flex: none; width: 210px; font-size: 12px; }
+.seg.seg-sm button { padding: 4px 0; }
+@media (max-width: 560px) { .list .item { flex-wrap: wrap; } .seg.seg-sm { width: 100%; } }

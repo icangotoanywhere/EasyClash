@@ -635,75 +635,109 @@ async function testGroup(name) {
   await refresh(true);
 }
 
-// ======================= 程序（分程序代理） =======================
-const APP_MODES = [
-  ['all', '全部程序', '所有程序的流量都按规则分流。'],
-  ['allow', '仅选中的程序', '只有你勾选的程序走代理，其他程序一律直连，不受影响。'],
-  ['deny', '排除选中的程序', '勾选的程序不走代理，其余程序照常按规则分流。适合排除网银、国内视频、游戏等。'],
+// ======================= 程序（分程序走法） =======================
+// 三种走法，从左到右：仅直连 / 按规则 / 仅代理。设置里只记"仅直连 / 仅代理"的程序，没记的按规则
+// 与 desktop/config.go 的 aiDomains 一致（只用于说明文字）
+const AI_DOMAINS = ['openai.com', 'chatgpt.com', 'oaistatic.com', 'oaiusercontent.com', 'sora.com', 'anthropic.com', 'claude.ai', 'claude.com', 'claudeusercontent.com',
+  'gemini.google.com', 'aistudio.google.com', 'notebooklm.google.com', 'bard.google.com', 'makersuite.google.com', 'generativelanguage.googleapis.com',
+  'perplexity.ai', 'pplx.ai', 'x.ai', 'grok.com', 'poe.com', 'copilot.microsoft.com', 'mistral.ai', 'character.ai'];
+const APP_ROUTES = [
+  ['direct', '仅直连', '完全不走代理，就像没开本软件。适合网银、微信、QQ、钉钉等国内必备软件。'],
+  ['rule', '按规则', '国内网站直连、国外网站走代理（默认）。'],
+  ['proxy', '仅代理', '所有连接都走代理，代理不通就连不上，绝不直连。适合 ChatGPT、Claude 等海外 AI 客户端。'],
 ];
+// 「一键推荐」：只认确定的程序名（不区分大小写），吃不准的保持按规则。与安卓版 AppRecommend.kt 的原则一致
+const REC_DIRECT = ['wechat.exe', 'weixin.exe', 'wechatappex.exe', 'qq.exe', 'tim.exe', 'wxwork.exe', 'dingtalk.exe', 'feishu.exe', 'lark.exe', 'wemeetapp.exe',
+  'wechat', 'qq', 'dingtalk', 'feishu', 'lark', '企业微信', '腾讯会议'];
+const REC_PROXY = ['chatgpt.exe', 'claude.exe', 'chatgpt', 'claude'];
+function recommendRoute(name) {
+  const n = name.toLowerCase();
+  if (REC_PROXY.includes(n)) return 'proxy';
+  if (REC_DIRECT.includes(n)) return 'direct';
+  return 'rule';
+}
 
 function pageApps() {
   const set = S.st.settings;
-  const out = [card('分程序代理',
-    '控制哪些程序的流量经过代理，按程序文件名（如 ' + P('chrome.exe', 'WeChat') + '）区分。\n\n' +
-    APP_MODES.map((m) => `「${m[1]}」：${m[2]}`).join('\n\n') +
-    '\n\n改动立即生效，不用重新连接。\n\n' +
-    (MAC() ? 'Mac 上很多程序由"辅助进程"负责联网：Chrome 要选「Google Chrome Helper」，Safari 要选「com.apple.WebKit.Networking」（勾选下面的「显示系统进程」才看得到）。\n\n' : '') +
-    '注意：系统代理模式下，只有遵守系统代理设置的程序（浏览器和大多数软件）会经过本软件，不认系统代理的程序本来就直连' +
-    (S.st.tunSupported ? '；想让所有程序都受控，请在「高级」页开启 TUN 模式。' : '。'),
-    helpText('选择哪些程序走代理。改动立即生效。', 'mb8'),
-    APP_MODES.map((m) => h('label', { class: 'radio' },
-      h('input', { type: 'radio', name: 'appmode', checked: set.appProxyMode === m[0], onchange: () => setSetting({ appProxyMode: m[0] }) }),
-      h('div', null, h('div', null, m[1]), helpText(m[2])))))];
-  if (set.appProxyMode === 'all') return out;
-
-  const chosen = new Set((set.appList || []).map((x) => x.toLowerCase()));
-  const toggle = (name, on) => {
-    const list = (set.appList || []).filter((x) => x.toLowerCase() !== name.toLowerCase());
-    if (on) list.push(name);
-    setSetting({ appList: list });
+  const routes = set.appRoutes || {};
+  const routeOf = (name) => {
+    const k = Object.keys(routes).find((x) => x.toLowerCase() === name.toLowerCase());
+    return k ? routes[k] : 'rule';
   };
+  const setRoute = (name, r) => {
+    const next = {};
+    for (const [k, v] of Object.entries(routes)) if (k.toLowerCase() !== name.toLowerCase()) next[k] = v;
+    if (r !== 'rule') next[name] = r;
+    setSetting({ appRoutes: next });
+  };
+  const nDirect = Object.values(routes).filter((v) => v === 'direct').length;
+  const nProxy = Object.values(routes).filter((v) => v === 'proxy').length;
+
+  const doRecommend = () => {
+    const names = new Set([...(S.procs || []).map((p) => p.name), ...Object.keys(routes)]);
+    const plan = {};
+    for (const n of names) { const r = recommendRoute(n); if (r !== 'rule') plan[n] = r; }
+    const list = (r) => Object.keys(plan).filter((k) => plan[k] === r).sort().join('、') || '（无）';
+    confirmDialog('一键推荐',
+      `将把 ${Object.values(plan).filter((v) => v === 'direct').length} 个程序设为仅直连、${Object.values(plan).filter((v) => v === 'proxy').length} 个设为仅代理，其余全部按规则（会覆盖你之前的单独设置）。\n\n仅直连：${list('direct')}\n\n仅代理：${list('proxy')}\n\n只看当前正在运行的程序和已设置过的程序；没在运行的可以稍后手动添加。`,
+      '应用推荐', () => setSetting({ appRoutes: plan }, '已应用推荐'));
+  };
+
+  const out = [card('分程序走法',
+    '给每个程序选一种走法，按程序文件名（如 ' + P('chrome.exe', 'WeChat') + '）区分：\n\n' +
+    APP_ROUTES.map((m) => `「${m[1]}」：${m[2]}`).join('\n\n') +
+    '\n\n「一键推荐」：微信、QQ、企业微信、钉钉、飞书、腾讯会议设为仅直连；ChatGPT、Claude 客户端设为仅代理；其余和吃不准的保持按规则。推荐后每个程序仍可单独改。\n\n' +
+    '改动立即生效，不用重新连接。\n\n' +
+    (MAC() ? 'Mac 上很多程序由"辅助进程"负责联网：Chrome 要选「Google Chrome Helper」，Safari 要选「com.apple.WebKit.Networking」（勾选下面的「显示系统进程」才看得到）。\n\n' : '') +
+    '注意：系统代理模式下，只有遵守系统代理设置的程序（浏览器和大多数软件）会经过本软件，不认系统代理的程序本来就直连，「仅代理」管不到它们' +
+    (S.st.tunSupported ? '；想让所有程序都受控，请在「高级」页开启 TUN 模式。' : '。') +
+    '\n\n浏览器里用 ChatGPT、Claude 等网页，由「高级」页的「AI 服务强制走代理」保护。',
+    helpText('每个程序三选一：仅直连 / 按规则 / 仅代理。默认全部按规则。', 'mb8'),
+    helpText(`当前：仅直连 ${nDirect} 个，仅代理 ${nProxy} 个，其余按规则。`, 'mb8'),
+    h('div', { class: 'row' },
+      btn('一键推荐', doRecommend, 'outlined', S.procs === null),
+      btn('全部按规则', () => confirmDialog('全部按规则', '把所有程序都改回「按规则」？', '确定', () => setSetting({ appRoutes: {} }, '已全部改回按规则')), 'outlined', nDirect + nProxy === 0)))];
+
   const manual = h('input', { type: 'text', placeholder: '手动添加程序名，例如 ' + P('WeChat.exe', 'WeChat') });
-  const addManual = () => {
+  const addManual = (route) => {
     let v = manual.value.trim();
     if (!v) return;
     if (!MAC() && !/\.exe$/i.test(v)) v += '.exe';
     manual.value = '';
-    toggle(v, true);
+    setRoute(v, route);
   };
-  manual.addEventListener('keydown', (e) => { if (e.key === 'Enter') addManual(); });
   const search = h('input', { type: 'text', placeholder: '搜索程序', value: S.procQuery, oninput: (e) => { S.procQuery = e.target.value; renderList(); } });
 
   const listBox = h('div', { class: 'list' });
   const renderList = () => {
     const procs = S.procs || [];
     const map = new Map();
-    for (const name of set.appList || []) map.set(name.toLowerCase(), { name, path: '', system: false, saved: true });
+    for (const name of Object.keys(routes)) map.set(name.toLowerCase(), { name, path: '', system: false, saved: true });
     for (const p of procs) {
       const k = p.name.toLowerCase();
       if (map.has(k)) { const o = map.get(k); o.path = p.path; o.system = p.system; o.running = true; } else map.set(k, { ...p, running: true });
     }
     const q = S.procQuery.trim().toLowerCase();
+    const set1 = (p) => routeOf(p.name) !== 'rule';
     const items = [...map.values()]
-      .filter((p) => (S.showSys || !p.system || chosen.has(p.name.toLowerCase())) && (!q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q)))
-      .sort((a, b) => (chosen.has(b.name.toLowerCase()) - chosen.has(a.name.toLowerCase())) || a.name.localeCompare(b.name));
+      .filter((p) => (S.showSys || !p.system || set1(p)) && (!q || p.name.toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q)))
+      .sort((a, b) => (set1(b) - set1(a)) || a.name.localeCompare(b.name));
     listBox.replaceChildren(...(S.procs === null ? [helpText('正在读取程序列表…')] : items.length ? items.map((p) => {
-      const on = chosen.has(p.name.toLowerCase());
-      return h('label', { class: 'item' },
-        h('input', { type: 'checkbox', checked: on, style: 'accent-color:var(--primary);width:17px;height:17px;flex:none', onchange: (e) => toggle(p.name, e.target.checked) }),
-        h('div', { class: 'grow' }, h('div', null, p.name), h('div', { class: 'sub' }, p.path || (p.running ? '（系统进程，路径不可读）' : '当前没有运行'))));
+      const cur = routeOf(p.name);
+      return h('div', { class: 'item' },
+        h('div', { class: 'grow' }, h('div', null, p.name), h('div', { class: 'sub' }, p.path || (p.running ? '（系统进程，路径不可读）' : '当前没有运行'))),
+        h('div', { class: 'seg seg-sm' }, APP_ROUTES.map((m) => h('button', { class: cur === m[0] ? 'on' : '', onclick: () => setRoute(p.name, m[0]) }, m[1]))));
     }) : [helpText('没有匹配的程序。')]));
   };
   renderList();
 
   out.push(card('程序列表', null,
-    helpText(set.appProxyMode === 'allow' ? `勾选的程序走代理，其他不走。已选 ${chosen.size} 个。` : `勾选的程序不走代理，其他都走。已选 ${chosen.size} 个。`, 'mb8'),
     h('div', { class: 'row' }, h('div', { class: 'grow' }, search), btn('刷新列表', () => { S.procs = null; renderList(); loadProcs().then(() => render(true)); }, 'outlined')),
     h('div', { class: 'row mt8' },
       h('label', { class: 'check grow' }, h('input', { type: 'checkbox', checked: S.showSys, onchange: (e) => { S.showSys = e.target.checked; render(true); } }), '显示系统进程'),
     ),
-    h('div', { class: 'row mt4' }, h('div', { class: 'grow' }, manual), btn('添加', addManual, 'outlined')),
-    helpText('列表里是当前正在运行的程序。想排除的程序没在运行时，可以在上面手动输入它的文件名。', 'mt4'),
+    h('div', { class: 'row mt4' }, h('div', { class: 'grow' }, manual), btn('设为仅直连', () => addManual('direct'), 'outlined'), btn('设为仅代理', () => addManual('proxy'), 'outlined')),
+    helpText('列表里是当前正在运行的程序，以及设置过的程序。要设置的程序没在运行时，可以在上面手动输入它的文件名。', 'mt4'),
     listBox));
   return out;
 }
@@ -711,7 +745,7 @@ function pageApps() {
 // ======================= 高级 =======================
 const RULES_HELP =
   '规则从哪来（从上往下逐条匹配，先命中的生效）：\n' +
-  '① 本软件加在最前面的：分程序代理、拦截 QUIC、微软服务走国内，以及你在「附加规则」里填的；\n' +
+  '① 本软件加在最前面的：分程序走法、拦截 QUIC、你在「附加规则」里填的、AI 服务强制走代理、微软服务走国内；\n' +
   '② 订阅自带的规则：机场已经写好哪些网站直连、哪些走代理，原样使用；\n' +
   '③ 订阅引用的规则集（如 Netflix、ChatGPT、广告拦截、国内网站列表）：内核自动下载，并按订阅设定定期更新（通常每天一次）。这些规则集大多放在国外网站上，本软件固定让它们经代理下载；\n' +
   '④ 订阅没带规则时，本软件自动补一套基础分流：局域网、国内网站、国内 IP 直连，其余走代理。\n' +
@@ -806,7 +840,10 @@ function pageAdvanced() {
       (v) => setSetting({ bingDirect: v })),
     switchRow('出境直连失败自动转代理', '发往境外的直连连不上时，自动改走代理再试一次。默认开。', set.directFallback,
       '有些境外网站按规则是直连的（例如微软服务，或订阅规则没覆盖到、事先说不清会不会被墙的境外地址），偶尔会连不上。开启后：\n\n• 规则让它直连、而目标在境外时，如果直连连不上（超时、被拒绝、域名解析失败），自动改走代理再试一次。走的是首页选的出口地区（没锁定地区时走订阅的主策略组）。\n• 同一个网站失败过一次就记住，本次连接期间直接走代理，不再先试直连，只慢第一次。断开重连后重新判断。\n• 国内网站（在国内网站列表里，或 IP 在国内）直连失败按正常失败处理，不重试；局域网地址也不重试。\n\n只会「直连失败改走代理」，反过来绝不会：代理连不上时宁可打不开，也不会偷偷改用直连，避免你的真实 IP 暴露给 Claude、Google 等服务。\n\n局限：只能发现「连不上」。已经连上、之后才被掐断或限速的情况发现不了；UDP（如 QUIC）也不在此列。哪些网站被改走了代理，可以在内核日志里看到（带 [EasyClash] 字样）。\n\n首页选了「直连」模式时不起作用。',
-      (v) => setSetting({ directFallback: v }))));
+      (v) => setSetting({ directFallback: v })),
+    switchRow('AI 服务强制走代理', 'ChatGPT、Claude、Gemini 等 AI 服务的网站一律走代理、绝不直连。默认开。', set.aiForceProxy,
+      '开启后，下面这些域名（含子域名）的连接一律走代理（首页选的出口地区），并且绝不直连：不管订阅规则怎么写、策略组里选的是不是直连、首页是不是「直连」模式。代理不通时直接打不开，不会退回直连暴露你的真实 IP。\n\n浏览器和客户端里用这些服务都受保护。\n\n包括：' + AI_DOMAINS.join('、') + '\n\n对「程序」页里设为「仅直连」的程序不起作用。',
+      (v) => setSetting({ aiForceProxy: v }))));
 
   // ---- 自动测速 ----
   const ivInput = h('input', { type: 'number', min: 1, max: 1440, value: draft('testIv', String(set.testIntervalMin || 2)), oninput: (e) => { drafts.testIv = e.target.value; } });

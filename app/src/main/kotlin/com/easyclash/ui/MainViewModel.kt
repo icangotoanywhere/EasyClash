@@ -10,6 +10,8 @@ import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.RegionLock
 import com.easyclash.core.Regions
 import com.easyclash.data.AppInfo
+import com.easyclash.data.AppRecommend
+import com.easyclash.data.AppRoute
 import com.easyclash.data.ConnectionItem
 import com.easyclash.data.ProxyItem
 import com.easyclash.data.ProxyMode
@@ -245,10 +247,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun toggleApp(pkg: String, checked: Boolean) {
-        store.update { if (checked) it.appList.add(pkg) else it.appList.remove(pkg) }
-        // 分应用列表变化需要重新建立 VPN，提示用户重连
-        if (status.value == Status.CONNECTED) say("分应用设置将在下次连接时生效")
+    /** 改一个 App 的走法 */
+    fun setAppRoute(pkg: String, route: AppRoute) {
+        val old = settings.value.appRoutes[pkg] ?: AppRoute.RULE
+        if (old == route) return
+        store.update { if (route == AppRoute.RULE) it.appRoutes.remove(pkg) else it.appRoutes.put(pkg, route) }
+        afterRoutesChanged(old == AppRoute.DIRECT_ONLY || route == AppRoute.DIRECT_ONLY)
+    }
+
+    /** 「一键推荐」的结果（只含不是「按规则」的 App），先给界面确认 */
+    fun recommendedRoutes(): Map<String, AppRoute> =
+        _apps.value.associate { it.packageName to AppRecommend.recommend(it) }.filterValues { it != AppRoute.RULE }
+
+    /** 整体替换所有 App 的走法（一键推荐 / 全部按规则） */
+    fun replaceAppRoutes(routes: Map<String, AppRoute>) {
+        val oldDirect = settings.value.appRoutes.filterValues { it == AppRoute.DIRECT_ONLY }.keys
+        store.update { it.appRoutes = routes.filterValues { r -> r != AppRoute.RULE }.toMutableMap() }
+        afterRoutesChanged(oldDirect != routes.filterValues { it == AppRoute.DIRECT_ONLY }.keys)
+    }
+
+    // 「仅代理」靠内核规则，重载配置即生效；「仅直连」要把 App 移出 VPN 隧道，系统限制只能重新连接
+    private fun afterRoutesChanged(directChanged: Boolean) {
+        if (status.value != Status.CONNECTED) return
+        reloadIfConnected()
+        if (directChanged) say("「仅直连」的改动要断开再重新连接才生效（系统限制）")
     }
 
     // ---------- 连接列表 ----------

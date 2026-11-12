@@ -16,7 +16,7 @@ import com.easyclash.R
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
 import com.easyclash.core.RegionLock
-import com.easyclash.data.AppProxyMode
+import com.easyclash.data.AppRoute
 import com.easyclash.data.ProxyMode
 import com.easyclash.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +101,7 @@ class EasyClashVpnService : VpnService() {
         VpnState.setStatus(Status.CONNECTING)
         val app = EasyClashApp.instance
         val store = app.store
+        runCatching { store.migrateLegacyAllowList() }   // 旧版「仅选中的应用」设置的换算（做过就跳过）
         val settings = store.settings.value
         try {
             val sub = store.selectedSub() ?: throw IllegalStateException("还没有选择订阅，请先在「订阅」页添加一个机场订阅")
@@ -109,7 +110,7 @@ class EasyClashVpnService : VpnService() {
             copyBundledGeoFiles(store.homeDir)
 
             // 1. 建立 TUN
-            val pfd = buildTun(settings.appProxyMode, settings.appList, settings.ipv6)
+            val pfd = buildTun(settings.appRoutes, settings.ipv6)
                 ?: throw IllegalStateException("系统拒绝建立 VPN（可能有另一个 VPN 正在运行，或未授予 VPN 权限）")
             tun = pfd
 
@@ -117,9 +118,10 @@ class EasyClashVpnService : VpnService() {
             secret = randomSecret()
             val out = File(store.runDir, "config.yaml")
             val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret)
-            VpnState.appendLog("[APP] TUN fd=${pfd.fd} stack=${settings.tunStack.coreValue} mode=${settings.appProxyMode} 主组=${result.mainGroup} 地区组=${result.regionGroups.size}")
+            VpnState.appendLog("[APP] TUN fd=${pfd.fd} stack=${settings.tunStack.coreValue} 仅直连=${settings.appRoutes.count { it.value == AppRoute.DIRECT_ONLY }} 仅代理=${settings.appRoutes.count { it.value == AppRoute.PROXY_ONLY }}${if (AppOwner.supported) "" else "(本机系统不支持)"} 主组=${result.mainGroup} 地区组=${result.regionGroups.size}")
 
             // 3. 启动内核
+            core.Core.setPackageResolver(if (AppOwner.supported) AppOwner(this@EasyClashVpnService) else null)
             core.Core.setProtector(object : core.SocketProtector {
                 override fun protect(fd: Long): Boolean = this@EasyClashVpnService.protect(fd.toInt())
             })
@@ -175,7 +177,7 @@ class EasyClashVpnService : VpnService() {
         runCatching { RegionLock.apply(api, store, mainGroup, region) }
     }
 
-    private fun buildTun(mode: AppProxyMode, apps: Set<String>, ipv6: Boolean): ParcelFileDescriptor? {
+    private fun buildTun(routes: Map<String, AppRoute>, ipv6: Boolean): ParcelFileDescriptor? {
         val b = Builder()
             .setSession("EasyClash")
             .setMtu(ConfigBuilder.TUN_MTU)
@@ -189,17 +191,9 @@ class EasyClashVpnService : VpnService() {
         }
         if (Build.VERSION.SDK_INT >= 29) b.setMetered(false)
         val self = packageName
-        when (mode) {
-            AppProxyMode.ALL -> runCatching { b.addDisallowedApplication(self) }
-            AppProxyMode.ALLOW_LIST -> {
-                val list = apps.filter { it != self }
-                if (list.isEmpty()) runCatching { b.addDisallowedApplication(self) }
-                list.forEach { runCatching { b.addAllowedApplication(it) } }
-            }
-            AppProxyMode.DENY_LIST -> {
-                (apps + self).forEach { runCatching { b.addDisallowedApplication(it) } }
-            }
-        }
+        // 「仅直连」的 App 完全不进隧道（没装的包名会抛异常，忽略）；其余都进隧道，由内核按规则 / 仅代理处理
+        runCatching { b.addDisallowedApplication(self) }
+        routes.filter { it.value == AppRoute.DIRECT_ONLY && it.key != self }.keys.forEach { runCatching { b.addDisallowedApplication(it) } }
         val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         b.setConfigureIntent(pi)
         return b.establish()

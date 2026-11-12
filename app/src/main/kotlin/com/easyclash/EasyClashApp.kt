@@ -20,6 +20,7 @@ class EasyClashApp : Application() {
         store = Store(this)
         repo = SubscriptionRepo(this, store)
         installCrashRecorder()
+        Thread { runCatching { store.migrateLegacyAllowList() } }.start()
     }
 
     /** 崩溃时把堆栈写到 files/crash.txt，高级页可以看到并复制，方便排查 */

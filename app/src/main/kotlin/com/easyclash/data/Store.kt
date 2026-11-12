@@ -63,6 +63,20 @@ class Store(private val ctx: Context) {
         return runCatching { Settings.fromJson(JSONObject(raw)) }.getOrDefault(Settings())
     }
 
+    /**
+     * 旧版「仅选中的应用」模式的换算：名单里的保持「按规则」，当时已安装的其他 App 设为「仅直连」。
+     * 要读已安装应用列表，所以不能在解析设置时做；App 启动时和建立 VPN 前各调用一次，做过就不再做。
+     */
+    @Synchronized
+    fun migrateLegacyAllowList() {
+        val allow = _settings.value.legacyAllowList ?: return
+        val installed = runCatching { ctx.packageManager.getInstalledApplications(0).map { it.packageName } }.getOrDefault(emptyList())
+        update { s ->
+            installed.filter { it != ctx.packageName && it !in allow && it !in s.appRoutes }.forEach { s.appRoutes[it] = AppRoute.DIRECT_ONLY }
+            s.legacyAllowList = null
+        }
+    }
+
     /** 修改设置并保存。用法：store.update { it.ipv6 = true } */
     fun update(block: (Settings) -> Unit) {
         val s = Settings.fromJson(_settings.value.toJson()) // 深拷贝

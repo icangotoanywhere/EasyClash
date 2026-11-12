@@ -1,6 +1,8 @@
 package com.easyclash.core
 
+import com.easyclash.data.AppRoute
 import com.easyclash.data.Settings
+import com.easyclash.vpn.AppOwner
 import org.yaml.snakeyaml.DumperOptions
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
@@ -27,6 +29,19 @@ object ConfigBuilder {
     const val TUN_MTU = 9000
     const val FALLBACK_MAIN_GROUP = "🚀 节点选择"
     const val GEO_MIRROR_HOST = "testingcf.jsdelivr.net"
+
+    /**
+     * 「AI 服务强制走代理」的域名（含所有子域名）。与电脑版 desktop/config.go 的 aiDomains 保持一致。
+     * 这些域名一律走主组、并由内核侧（fallback.go）禁止直连：规则、订阅策略组、直连模式都不能让它们直连。
+     */
+    val AI_DOMAINS = listOf(
+        "openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "sora.com",
+        "anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com",
+        "gemini.google.com", "aistudio.google.com", "notebooklm.google.com", "bard.google.com",
+        "makersuite.google.com", "generativelanguage.googleapis.com",
+        "perplexity.ai", "pplx.ai", "x.ai", "grok.com", "poe.com",
+        "copilot.microsoft.com", "mistral.ai", "character.ai",
+    )
 
     /** 订阅没带分流规则时补上的基础分流（GEOSITE 用内置 geosite.dat，GEOIP 用内置 geoip.metadb） */
     val BASIC_RULES = listOf(
@@ -183,10 +198,16 @@ object ConfigBuilder {
             // 有规则但没有兜底：没命中的流量内核默认直连，这里补成走主组
             rules += "MATCH,$mainGroup"
         }
+        // 「仅代理」的 App（需要安卓 10 及以上才能按 App 区分连接）
+        val proxyOnlyApps = if (AppOwner.supported) settings.appRoutes.filterValues { it == AppRoute.PROXY_ONLY }.keys.sorted() else emptyList()
+        val aiDomains = if (settings.aiForceProxy) AI_DOMAINS else emptyList()
+        // 顺序：屏蔽 QUIC → 仅代理的 App → 用户附加规则 → AI 域名 → 微软走国内 → …… → 订阅规则
         val front = mutableListOf<String>()
         if (settings.blockQuic) front += "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT"
-        if (settings.bingDirect) front += microsoftDirectRule()
+        proxyOnlyApps.forEach { front += "PROCESS-NAME,$it,$mainGroup" }
         settings.extraRules.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { front += it }
+        aiDomains.forEach { front += "DOMAIN-SUFFIX,$it,$mainGroup" }
+        if (settings.bingDirect) front += microsoftDirectRule()
         // 地理数据库的更新下载也固定走代理（理由同上）
         if (!downloadVia.contains(',')) front += "DOMAIN,$GEO_MIRROR_HOST,$downloadVia"
         // 内核自己的控制接口与本地回环永远直连
@@ -215,7 +236,13 @@ object ConfigBuilder {
         cfg["secret"] = secret
         cfg["unified-delay"] = true
         cfg["tcp-concurrent"] = true
-        cfg["find-process-mode"] = "off"
+        // 有「仅代理」的 App 时，每条连接都查一次属于哪个 App（全局 / 直连模式不走规则，也要能拦住直连）
+        cfg["find-process-mode"] = if (proxyOnlyApps.isNotEmpty()) "always" else "off"
+        // 「仅代理」保护：这些 App 和域名的连接由内核侧（core/fallback.go）禁止直连
+        cfg.remove("easyclash-proxy-only")
+        if (proxyOnlyApps.isNotEmpty() || aiDomains.isNotEmpty()) {
+            cfg["easyclash-proxy-only"] = linkedMapOf("apps" to proxyOnlyApps, "domains" to aiDomains)
+        }
         cfg["geodata-mode"] = false
         cfg["geo-auto-update"] = false
         cfg["profile"] = linkedMapOf("store-selected" to true, "store-fake-ip" to true)
