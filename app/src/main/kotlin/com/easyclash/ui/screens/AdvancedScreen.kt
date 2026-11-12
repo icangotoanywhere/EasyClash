@@ -192,9 +192,13 @@ fun AdvancedScreen(vm: MainViewModel) {
             Button(onClick = { vm.updateSettings { it.overrideYaml = ov } }) { Text("保存覆写") }
         }
 
-        // ================= 快捷开关 =================
-        SectionCard(title = "下拉菜单快捷开关", help = "在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。\n\n安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
-            HelpText("把连接开关放到系统下拉菜单里。", Modifier.padding(bottom = 4.dp))
+        // ================= 通知与快捷开关 =================
+        SectionCard(title = "通知与快捷开关", help = "常驻通知：连接后通知栏（和锁屏）上显示当前节点、最近一次延迟和速度，带「测速」按钮。\n\n快捷开关：在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
+            SwitchRow(
+                "通知里显示「断开」按钮", "默认不显示，免得误触。断开可以在 App 首页或下拉快捷开关里操作。",
+                settings.notifyStopButton,
+            ) { v -> vm.updateSettings { it.notifyStopButton = v } }
+            HelpText("把连接开关放到系统下拉菜单里。", Modifier.padding(top = 8.dp, bottom = 4.dp))
             if (Build.VERSION.SDK_INT >= 33) {
                 OutlinedButton(onClick = {
                     runCatching {

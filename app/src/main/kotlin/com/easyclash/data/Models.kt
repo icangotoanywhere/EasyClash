@@ -79,6 +79,8 @@ data class Settings(
     var mixedPort: Int = 17890,   // 7890 常被其他 Clash 占用
     /** 自动测速 / 自动选节点的周期（分钟） */
     var testIntervalMin: Int = 5,
+    /** 常驻通知里是否显示「断开」按钮。默认不显示，免得误触 */
+    var notifyStopButton: Boolean = false,
     var geoAutoUpdate: Boolean = true,           // 连接后自动检查地理数据库（每 7 天一次）
     var geoLastCheck: Long = 0L,                 // 上次成功检查 / 更新数据库的时间（毫秒）
     var geoLastAttempt: Long = 0L,               // 上次尝试时间，失败后 12 小时内不再自动重试
@@ -90,7 +92,7 @@ data class Settings(
         put("mode", mode.name); put("appProxyMode", appProxyMode.name)
         put("appList", JSONArray(appList.toList()))
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
-        put("testIntervalMin", testIntervalMin)
+        put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect); put("directFallback", directFallback)
         put("useSubscriptionDns", useSubscriptionDns)
         put("tunStack", tunStack.name); put("logLevel", logLevel)
@@ -112,6 +114,7 @@ data class Settings(
             s.lockedRegion = if (o.isNull("lockedRegion")) null else o.optString("lockedRegion")
             s.ipv6 = o.optBoolean("ipv6", false)
             s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)
+            s.notifyStopButton = o.optBoolean("notifyStopButton", false)
             s.blockQuic = o.optBoolean("blockQuic", true)
             s.bingDirect = o.optBoolean("bingDirect", true)
             s.directFallback = o.optBoolean("directFallback", true)

@@ -408,7 +408,11 @@ class EasyClashVpnService : VpnService() {
             val test = PendingIntent.getBroadcast(this, 2, Intent(this, TestReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
             b.addAction(Notification.Action.Builder(null, if (testing) "测速中…" else "测速", test).build())
         }
-        return b.addAction(Notification.Action.Builder(null, "断开", stop).build()).build()
+        // 「断开」按钮默认不显示，免得误触；高级页可打开
+        if (EasyClashApp.instance.store.settings.value.notifyStopButton) {
+            b.addAction(Notification.Action.Builder(null, "断开", stop).build())
+        }
+        return b.build()
     }
 
     private fun updateNotification(text: String) {
