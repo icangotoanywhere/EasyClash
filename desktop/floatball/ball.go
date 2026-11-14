@@ -74,8 +74,9 @@ const (
 
 // Node 悬浮球展开面板里「线路」一行的内容
 type Node struct {
-	Text string // 例如 "日本 · 东京 03 · 85ms"、"未使用代理（直连）"、"其他代理软件 127.0.0.1:7897"
-	Kind int    // NodeEasyClash / NodeOther / NodeNone，决定颜色
+	Text   string // 「线路」一行，例如 "EasyClash · 日本（已锁定）"、"未使用代理"、"其他代理软件"
+	Detail string // 下一行（节点名和延迟，或补充说明），可为空
+	Kind   int    // NodeEasyClash / NodeOther / NodeNone，决定颜色
 }
 
 const (
@@ -321,7 +322,7 @@ func intervalText(sec int) string {
 
 func windowSize() (int, int) {
 	if cfg.Expanded {
-		return int(px(350)), int(px(128))
+		return int(px(350)), int(px(146))
 	}
 	return int(px(76)), int(px(76))
 }
@@ -446,9 +447,12 @@ func render() {
 			ncol = 0xFFF5C518
 		}
 		drawText(g, "线路  "+nd.Text, px(12), false, ncol, RectF{x0, y + px(60), tw, px(18)}, 0)
+		if nd.Detail != "" {
+			drawText(g, "节点  "+nd.Detail, px(12), false, ncol, RectF{x0, y + px(78), tw, px(18)}, 0)
+		}
 
 		// footer: status dot + text
-		fy := y + px(81)
+		fy := y + px(99)
 		fillEllipse(g, col, x0, fy+px(5), px(8), px(8))
 		foot := statusText(st)
 		if chk && !have {
@@ -644,6 +648,9 @@ func showMenu() {
 			}
 			mu.Lock()
 			s += "\r\n线路: " + node.Text
+			if node.Detail != "" {
+				s += "\r\n节点: " + node.Detail
+			}
 			mu.Unlock()
 			copyText(s)
 		}

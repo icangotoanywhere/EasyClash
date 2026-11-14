@@ -48,25 +48,25 @@ func (a *App) floatNode() floatball.Node {
 	if !inUse {
 		switch {
 		case sysHP != "" && sysHP != ours:
-			return floatball.Node{Text: "未使用 EasyClash，走其他代理软件（" + sysHP + "）", Kind: floatball.NodeOther}
+			return floatball.Node{Text: "其他代理软件", Detail: "未使用 EasyClash，系统代理指向 " + sysHP, Kind: floatball.NodeOther}
 		case status == stConnected:
-			return floatball.Node{Text: "未使用代理（EasyClash 已连接，但系统代理没有指向它）", Kind: floatball.NodeNone}
+			return floatball.Node{Text: "未使用代理", Detail: "EasyClash 已连接，但系统代理没有指向它", Kind: floatball.NodeNone}
 		default:
-			return floatball.Node{Text: "未使用代理（直连）", Kind: floatball.NodeNone}
+			return floatball.Node{Text: "未使用代理", Detail: "直连上网", Kind: floatball.NodeNone}
 		}
 	}
 	if st.Mode == "direct" {
-		return floatball.Node{Text: "EasyClash 直连模式（不走代理）", Kind: floatball.NodeNone}
+		return floatball.Node{Text: "EasyClash · 直连模式", Detail: "不走代理", Kind: floatball.NodeNone}
 	}
 
 	api := a.API()
 	mainGroup, regions := a.runtime()
 	if api == nil {
-		return floatball.Node{Text: "EasyClash 已连接", Kind: floatball.NodeEasyClash}
+		return floatball.Node{Text: "EasyClash", Kind: floatball.NodeEasyClash}
 	}
 	px, err := api.Proxies()
 	if err != nil {
-		return floatball.Node{Text: "EasyClash 已连接（读取节点失败）", Kind: floatball.NodeEasyClash}
+		return floatball.Node{Text: "EasyClash", Detail: "读取节点失败", Kind: floatball.NodeEasyClash}
 	}
 	start := mainGroup
 	if st.Mode == "global" {
@@ -85,19 +85,20 @@ func (a *App) floatNode() floatball.Node {
 		}
 		name = p.Now
 	}
-	text := plainName(name)
+	detail := plainName(name)
 	if name == "DIRECT" {
-		text = "直连"
-	}
-	for _, r := range regions {
-		if r.Code == st.LockedRegion {
-			text = r.DisplayName() + "（已锁定） · " + text
-		}
+		detail = "直连"
 	}
 	if delay > 0 {
-		text += " · " + itoa(delay) + "ms"
+		detail += " · " + itoa(delay) + "ms"
 	}
-	return floatball.Node{Text: "EasyClash  " + text, Kind: floatball.NodeEasyClash}
+	line := "EasyClash"
+	for _, r := range regions {
+		if r.Code == st.LockedRegion {
+			line += " · " + r.DisplayName() + "（已锁定）"
+		}
+	}
+	return floatball.Node{Text: line, Detail: detail, Kind: floatball.NodeEasyClash}
 }
 
 // plainName 去掉节点名里的国旗表情（悬浮球的字体画不出国旗，会显示成方块）
