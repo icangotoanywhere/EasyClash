@@ -243,6 +243,11 @@ func u16p(s string) uintptr { return uintptr(unsafe.Pointer(u16(s))) }
 // raw 32-bit values, so the raw bits are correct in every position.
 func f(v float32) uintptr { return uintptr(math.Float32bits(v)) }
 
+// call 调 Windows API。必须带 go:uintptrescapes：参数里常有 uintptr(unsafe.Pointer(&局部变量))，
+// 没有这条指令时变量可能留在 goroutine 栈上，经过这层函数时栈一旦搬家，Windows 就会写进已释放的旧栈，
+// 破坏别的 goroutine（v1.0.32 的崩溃：runtime.adjustpointers "invalid pointer found on stack"）。
+//
+//go:uintptrescapes
 func call(p *syscall.LazyProc, a ...uintptr) uintptr {
 	r, _, _ := p.Call(a...)
 	return r
