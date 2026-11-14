@@ -43,7 +43,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.easyclash.vpn.KeepAlive
+import com.easyclash.vpn.VpnState
 import com.easyclash.data.TunStack
 import com.easyclash.ui.MainViewModel
 import com.easyclash.ui.components.HelpText
@@ -197,6 +200,9 @@ fun AdvancedScreen(vm: MainViewModel) {
             Button(onClick = { vm.updateSettings { it.overrideYaml = ov } }) { Text("保存覆写") }
         }
 
+        // ================= 后台常驻 =================
+        KeepAliveSection()
+
         // ================= 通知与快捷开关 =================
         SectionCard(title = "通知与快捷开关", help = "常驻通知：连接后通知栏（和锁屏）上显示当前节点、最近一次延迟和速度，带「测速」按钮。\n\n快捷开关：在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
             SwitchRow(
@@ -321,4 +327,52 @@ private fun ConnectionsDialog(vm: MainViewModel, onClose: () -> Unit) {
         confirmButton = { TextButton(onClick = onClose) { Text("关闭") } },
         dismissButton = { TextButton(onClick = { vm.closeAllConnections() }) { Text("全部断开") } },
     )
+}
+
+/**
+ * 后台常驻：检测电池优化、「始终开启的 VPN」，并跳到对应的系统设置。
+ * 从系统设置返回本页时会重新检测。
+ */
+@Composable
+private fun KeepAliveSection() {
+    val ctx = LocalContext.current
+    var battery by remember { mutableStateOf(KeepAlive.ignoringBatteryOptimizations(ctx)) }
+    LifecycleResumeEffect(Unit) {
+        battery = KeepAlive.ignoringBatteryOptimizations(ctx)
+        onPauseOrDispose { }
+    }
+    val alwaysOn by VpnState.alwaysOn.collectAsStateWithLifecycle()
+    val lockdown by VpnState.lockdown.collectAsStateWithLifecycle()
+    SectionCard(
+        title = "后台常驻",
+        help = "手机系统为了省电，会在后台把软件杀掉，VPN 就断了。按下面几项放开，EasyClash 就能一直在后台运行：\n\n" +
+            "① 电池优化：允许 EasyClash 在后台运行、不做电池优化。这一项最重要：放开后，即使被系统杀掉，安卓也允许它自动重新启动并重连。\n\n" +
+            "② 始终开启的 VPN：系统设置 → VPN → EasyClash 旁边的齿轮，打开「始终开启的 VPN」。开机会自动连接，被杀后系统也会重新拉起。" +
+            "注意不要勾「屏蔽未使用 VPN 的连接」：勾了之后，EasyClash 断开时整机断网，「应用」页里被排除的 App 也可能一起断网。\n\n" +
+            "③ 自启动 / 后台活动：国产手机还有自己的一套管控，见下面按品牌的提示。\n\n" +
+            "④ 多任务界面里把 EasyClash 的卡片锁住（下拉或长按卡片，选「锁定」），一键清理时就不会被关掉。\n\n" +
+            "EasyClash 本身已经做了：前台服务 + 常驻通知；被系统杀掉后自动重新拉起并重连。被另一个 VPN 顶掉、或你在系统设置里手动断开时，不会自动抢回来。",
+    ) {
+        KeyValueRow("电池优化", if (battery) "已放开（不受限制）✓" else "受限制（后台容易被杀）")
+        if (!battery) {
+            OutlinedButton(onClick = { KeepAlive.open(ctx, KeepAlive.batteryIntent(ctx), KeepAlive.batteryListIntent(), KeepAlive.appDetailsIntent(ctx)) }) {
+                Text("允许在后台运行")
+            }
+        }
+        KeyValueRow(
+            "始终开启的 VPN",
+            when (alwaysOn) {
+                true -> if (lockdown == true) "已开启（且勾了屏蔽未使用 VPN 的连接）" else "已开启 ✓"
+                false -> "未开启"
+                null -> "连接后可查看"
+            },
+        )
+        if (lockdown == true) HelpText("建议取消勾选「屏蔽未使用 VPN 的连接」：否则 EasyClash 断开时整机断网，被排除的 App 也可能连不上。")
+        OutlinedButton(onClick = { KeepAlive.open(ctx, KeepAlive.vpnSettingsIntent()) }) { Text("打开系统 VPN 设置") }
+        HelpText("在 EasyClash 旁边的齿轮里打开「始终开启的 VPN」。", Modifier.padding(bottom = 8.dp))
+
+        HelpText("自启动 / 后台活动：" + KeepAlive.romTip(), Modifier.padding(bottom = 4.dp))
+        OutlinedButton(onClick = { KeepAlive.open(ctx, KeepAlive.appDetailsIntent(ctx)) }) { Text("打开本应用的系统设置") }
+        HelpText("另外，在多任务界面把 EasyClash 的卡片锁住，一键清理时就不会被关掉。", Modifier.padding(top = 4.dp))
+    }
 }

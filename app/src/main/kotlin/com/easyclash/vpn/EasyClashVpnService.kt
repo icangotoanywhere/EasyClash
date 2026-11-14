@@ -77,6 +77,7 @@ class EasyClashVpnService : VpnService() {
     @Volatile private var leafName: String? = null        // 当前实际出口节点名（内核里的名字）
     @Volatile private var trafficText: String = ""
     @Volatile private var testing = false
+    @Volatile private var startReason: String? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -85,6 +86,12 @@ class EasyClashVpnService : VpnService() {
             ACTION_TEST -> { testFromNotification(); return START_STICKY }
             else -> {
                 if (VpnState.status.value == Status.CONNECTED || VpnState.status.value == Status.CONNECTING) return START_STICKY
+                // 记下是谁拉起的服务，方便排查"后台被杀"的问题（连接开始时会清空日志，所以先存起来）
+                startReason = when {
+                    intent == null -> "服务曾被系统杀掉，系统已自动重新拉起，正在重连"
+                    intent.action == VpnService.SERVICE_INTERFACE -> "由系统「始终开启的 VPN」启动（开机或被杀后自动恢复）"
+                    else -> null
+                }
                 val n = buildNotification("正在连接…")
                 if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFY_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
                 else startForeground(NOTIFY_ID, n)
@@ -98,6 +105,7 @@ class EasyClashVpnService : VpnService() {
     private suspend fun connect() {
         VpnState.clearError()
         VpnState.resetLogs()
+        startReason?.let { VpnState.appendLog("[APP] $it") }; startReason = null
         VpnState.setStatus(Status.CONNECTING)
         val app = EasyClashApp.instance
         val store = app.store
@@ -148,6 +156,10 @@ class EasyClashVpnService : VpnService() {
             VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
             VpnState.setStatus(Status.CONNECTED)
+            if (Build.VERSION.SDK_INT >= 29) VpnState.setAlwaysOn(isAlwaysOn, isLockdownEnabled)
+            if (!KeepAlive.ignoringBatteryOptimizations(this@EasyClashVpnService)) {
+                VpnState.appendLog("[APP] 提示：本应用仍受电池优化限制，后台容易被系统杀掉。可在「高级」页的「后台常驻」里放开")
+            }
             updateNotification("已连接 · ${sub.name}")
             startTrafficMonitor(api)
             startNodeMonitor(api)
@@ -292,8 +304,11 @@ class EasyClashVpnService : VpnService() {
         stopSelf()
     }
 
-    /** 用户从系统设置里断开了 VPN */
-    override fun onRevoke() { scope.launch { stopEverything("系统撤销了 VPN 权限（通常是另一个 VPN 被打开）") } }
+    /**
+     * 用户在系统设置里断开了 VPN，或者另一个 VPN 顶替了本应用。
+     * 不自动重连：这时本应用已经没有 VPN 权限，强行重连只会和别的 VPN 来回抢。
+     */
+    override fun onRevoke() { scope.launch { stopEverything("系统撤销了 VPN 权限（在系统设置里断开了，或另一个 VPN 被打开）") } }
 
     override fun onDestroy() {
         // 必须同步清理，否则系统销毁服务时内核会残留运行、TUN 泄漏

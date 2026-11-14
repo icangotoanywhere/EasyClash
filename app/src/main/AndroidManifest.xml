@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 后台常驻：弹出系统"允许在后台运行（不优化电池）"对话框 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 分应用代理需要列出手机上安装的全部应用 -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"

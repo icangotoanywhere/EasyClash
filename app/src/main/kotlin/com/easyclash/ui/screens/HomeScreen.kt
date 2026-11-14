@@ -34,10 +34,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.easyclash.data.ProxyMode
 import com.easyclash.ui.MainViewModel
+import com.easyclash.ui.components.ConfirmDialog
 import com.easyclash.ui.components.HelpText
 import com.easyclash.ui.components.KeyValueRow
 import com.easyclash.ui.components.SectionCard
 import com.easyclash.ui.components.humanBytes
+import com.easyclash.vpn.KeepAlive
 import com.easyclash.vpn.Status
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -50,6 +52,20 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
     val subs by vm.subs.collectAsStateWithLifecycle()
     val proxies by vm.proxies.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+
+    // 第一次连接成功后，若仍受电池优化限制，提醒一次「允许在后台运行」（只提醒一次，高级页随时可再设）
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    if (status == Status.CONNECTED && !settings.keepAliveAsked && !KeepAlive.ignoringBatteryOptimizations(ctx)) {
+        ConfirmDialog(
+            title = "让 EasyClash 常驻后台",
+            text = "手机系统为了省电，可能会在后台把 EasyClash 杀掉，VPN 就断了。\n\n" +
+                "建议允许它在后台运行（不做电池优化）：放开后即使被杀，系统也会自动重新启动并重连。\n\n" +
+                "更多设置（始终开启的 VPN、自启动、锁定多任务卡片）在「高级」页的「后台常驻」里。",
+            confirmText = "去允许",
+            onDismiss = { vm.updateSettings { it.keepAliveAsked = true } },
+            onConfirm = { KeepAlive.open(ctx, KeepAlive.batteryIntent(ctx), KeepAlive.batteryListIntent(), KeepAlive.appDetailsIntent(ctx)) },
+        )
+    }
 
     val selectedSub = subs.firstOrNull { it.id == settings.selectedSubId }
     val connected = status == Status.CONNECTED

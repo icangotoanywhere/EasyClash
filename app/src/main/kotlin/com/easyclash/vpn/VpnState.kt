@@ -44,6 +44,14 @@ object VpnState {
     @Volatile var configPath: String = ""
         private set
 
+    /** 系统「始终开启的 VPN」是否指向本应用（安卓 10+ 连接后才知道；null = 未知） */
+    private val _alwaysOn = MutableStateFlow<Boolean?>(null)
+    val alwaysOn: StateFlow<Boolean?> = _alwaysOn
+    /** 是否同时勾了「屏蔽未使用 VPN 的连接」 */
+    private val _lockdown = MutableStateFlow<Boolean?>(null)
+    val lockdown: StateFlow<Boolean?> = _lockdown
+    internal fun setAlwaysOn(on: Boolean?, lockdown: Boolean?) { _alwaysOn.value = on; _lockdown.value = lockdown }
+
     internal fun setStatus(s: Status) { _status.value = s; if (s == Status.CONNECTED) _startedAt.value = System.currentTimeMillis() }
     internal fun setError(msg: String?) { _error.value = msg }
     internal fun setTraffic(up: Long, down: Long) { _traffic.value = up to down }
