@@ -44,7 +44,7 @@ import com.easyclash.vpn.Status
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
+fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit, onOpenAdvanced: () -> Unit = {}) {
     val status by vm.status.collectAsStateWithLifecycle()
     val error by vm.vpnError.collectAsStateWithLifecycle()
     val traffic by vm.traffic.collectAsStateWithLifecycle()
@@ -73,6 +73,15 @@ fun HomeScreen(vm: MainViewModel, onConnect: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
 
         // ================= 连接 =================
+        // 有新版本时提醒（打开 App 后会自动检查；升级在「高级」页）
+        val releases by vm.releases.collectAsStateWithLifecycle()
+        val newRel = releases.firstOrNull()?.takeIf { com.easyclash.data.Updater.newer(it.version, vm.currentVersion) }
+        if (newRel != null) {
+            SectionCard(title = "发现新版本 v${newRel.version}") {
+                HelpText("当前 v${vm.currentVersion}。覆盖安装，订阅和设置都会保留。\n升级要从 GitHub 下载：请保持能连上 GitHub（建议先连接 EasyClash，会自动走代理下载）。")
+                androidx.compose.material3.TextButton(onClick = onOpenAdvanced) { androidx.compose.material3.Text("查看更新内容并升级") }
+            }
+        }
         SectionCard(
             title = "连接",
             help = "点「连接」后手机所有网络流量先经过本软件，再按下面的规则决定走代理还是直连。首次连接系统会弹出 VPN 授权，点「确定」即可。通知栏会常驻一个图标，用来随时断开。",

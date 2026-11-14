@@ -170,7 +170,15 @@ class MainActivity : ComponentActivity() {
             },
         ) { padding ->
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(padding)) {
-                composable("home") { HomeScreen(vm, onConnect = { requestConnect() }) }
+                composable("home") {
+                    HomeScreen(vm, onConnect = { requestConnect() }, onOpenAdvanced = {
+                        nav.navigate("advanced") {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    })
+                }
                 composable("subs") { SubsScreen(vm, pendingImportUrl.value) { pendingImportUrl.value = null } }
                 composable("proxies") { ProxiesScreen(vm) }
                 composable("apps") { AppsScreen(vm) }

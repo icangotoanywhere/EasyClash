@@ -325,6 +325,14 @@ function pageHome() {
   const sel = st.subs.find((s) => s.id === set.selectedSubId);
   const out = [];
 
+  // ---- 有新版本时提醒 ----
+  const up = st.update || {};
+  if (up.hasNew && !up.busy) {
+    out.push(card('发现新版本 v' + up.latest, null,
+      helpText('当前 v' + up.current + '。升级只替换程序本身，订阅和设置都会保留。\n升级要从 GitHub 下载：请保持能连上 GitHub（建议先连接 EasyClash）。'),
+      h('div', { class: 'row mt8' }, btn('查看更新内容并升级', () => goto('advanced')))));
+  }
+
   // ---- 连接 ----
   const statusText = STATUS_LABEL[st.status] || st.status;
   let action;
@@ -890,6 +898,9 @@ function pageAdvanced() {
   }
   out.push(diag);
 
+  // ---- 版本与更新 ----
+  out.push(updateCard());
+
   // ---- 关于 ----
   out.push(card('关于', null,
     kv('软件', 'EasyClash ' + P('Windows', 'Mac') + ' 版 ' + st.version),
@@ -897,6 +908,37 @@ function pageAdvanced() {
     kv('数据位置', st.dataDir),
     helpText('本软件只是 mihomo 内核的一个简化界面，节点和线路都来自你自己的订阅。', 'mt4')));
   return out;
+}
+
+// 版本与更新：检查、原地升级、最近 3 个版本的更新内容
+function updateCard() {
+  const up = S.st.update || {};
+  const pct = up.total > 0 ? Math.floor((up.done * 100) / up.total) : 0;
+  const c = card('版本与更新',
+    '检查更新：从 GitHub 读取最近 3 个版本的信息（软件启动后和每隔 12 小时也会自动检查一次，有新版本会在首页提示）。\n\n' +
+    '一键升级：从 GitHub 下载新版本，原地替换程序后自动重新启动。程序位置不变，订阅、设置、开机自启都会保留。\n\n' +
+    '注意：检查和下载都要访问 GitHub，国内直连常常不通。请先连接 EasyClash，或确认这台电脑能打开 github.com。' +
+    P('\n\n程序所在的文件夹需要能写入：放在桌面、文档或自己建的文件夹里都可以；放在 Program Files 或直接在压缩包里运行时无法自动升级。',
+      '\n\nEasyClash.app 需要放在能写入的位置（比如「应用程序」文件夹）。'),
+    kv('当前版本', 'v' + (up.current || S.st.version)),
+    kv('最新版本', up.latest ? 'v' + up.latest + (up.hasNew ? '（有更新）' : '（已是最新）') : '还没检查'),
+    up.checkedAt ? kv('上次检查', up.checkedAt) : null,
+    helpText('升级要从 GitHub 下载，请保持能连上 GitHub（建议先连接 EasyClash）。', 'mt4'));
+  if (up.checkErr) c.append(h('div', { class: 'help err' }, up.checkErr));
+  if (up.installErr) c.append(h('div', { class: 'help err' }, up.installErr));
+  if (up.busy || (up.stage && !up.installErr)) {
+    c.append(h('div', { class: 'big mt8' }, up.stage + (up.busy && up.total > 0 ? ' ' + pct + '%' : '')));
+  }
+  c.append(h('div', { class: 'row mt8' },
+    btn('检查更新', () => act('update/check', {}, '检查完成'), 'outlined', up.busy),
+    up.hasNew && up.canInstall ? btn('升级到 v' + up.latest, () => act('update/install', {}), '', up.busy) : null));
+  if (up.hasNew && !up.canInstall) c.append(helpText('新版本里没有找到本平台的安装包，请到 GitHub 发布页手动下载。'));
+  for (const r of (up.releases || [])) {
+    const notes = (r.notes || '').replace(/^#+\s*/gm, '').replace(/\*\*/g, '').replace(/`/g, '').trim();
+    c.append(h('h3', null, 'v' + r.version + (r.date ? ' · ' + r.date : '') + (r.version === up.current ? '（当前）' : '')),
+      h('div', { class: 'logbox' }, notes || '（没有更新说明）'));
+  }
+  return c;
 }
 
 function rulesCard() {

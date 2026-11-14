@@ -40,6 +40,18 @@ func (u *UI) Quit() {
 	})
 }
 
+// RestartForUpdate 升级完成后：断开、释放单实例锁，启动新程序，自己退出
+func (u *UI) RestartForUpdate() {
+	u.app.Shutdown()
+	releaseSingleInstance()
+	if err := launchUpdated(); err != nil {
+		acquireSingleInstance()
+		u.app.setError("新版本已经装好，但没能自动重新启动：" + err.Error() + "。请退出后重新打开 EasyClash")
+		return
+	}
+	u.Quit()
+}
+
 // RestartElevated Mac 版不提供（TUN 模式暂不支持）
 func (u *UI) RestartElevated() {
 	u.app.setError("Mac 版暂不支持 TUN 模式，请使用系统代理")

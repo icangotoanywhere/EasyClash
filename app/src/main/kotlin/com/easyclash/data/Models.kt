@@ -85,6 +85,8 @@ data class Settings(
     var notifyStopButton: Boolean = false,
     /** 首次连接成功后是否已经提醒过「允许后台运行」（只提醒一次） */
     var keepAliveAsked: Boolean = false,
+    /** 上次自动检查更新的时间（毫秒），12 小时内不重复检查 */
+    var lastUpdateCheck: Long = 0,
     var geoAutoUpdate: Boolean = true,           // 连接后自动检查地理数据库（每 7 天一次）
     var geoLastCheck: Long = 0L,                 // 上次成功检查 / 更新数据库的时间（毫秒）
     var geoLastAttempt: Long = 0L,               // 上次尝试时间，失败后 12 小时内不再自动重试
@@ -97,7 +99,7 @@ data class Settings(
         put("appList", JSONArray(appList.toList()))
         put("aiForceProxy", aiForceProxy)
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
-        put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton); put("keepAliveAsked", keepAliveAsked)
+        put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton); put("keepAliveAsked", keepAliveAsked); put("lastUpdateCheck", lastUpdateCheck)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect); put("directFallback", directFallback)
         put("useSubscriptionDns", useSubscriptionDns)
         put("tunStack", tunStack.name); put("logLevel", logLevel)
@@ -135,6 +137,7 @@ data class Settings(
             s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)
             s.notifyStopButton = o.optBoolean("notifyStopButton", false)
             s.keepAliveAsked = o.optBoolean("keepAliveAsked", false)
+            s.lastUpdateCheck = o.optLong("lastUpdateCheck", 0)
             s.blockQuic = o.optBoolean("blockQuic", true)
             s.bingDirect = o.optBoolean("bingDirect", true)
             s.directFallback = o.optBoolean("directFallback", true)

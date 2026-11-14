@@ -8,6 +8,8 @@
 | Windows | [⬇️ EasyClash-Windows.zip](../../releases/latest/download/EasyClash-Windows.zip) | 解压后双击 `EasyClash.exe`，免安装，Windows 10 以上 |
 | macOS | [⬇️ EasyClash-macOS.dmg](../../releases/latest/download/EasyClash-macOS.dmg) | Intel 和 M 系列芯片通用，macOS 12 以上；第一次打开要在「隐私与安全性」里点「仍要打开」，见[说明](desktop/README.md#macos-第一次打开) |
 
+> **v1.0.31 起三个版本都能在 App 里一键升级**：「高级」页 →「版本与更新」，有新版本时首页也会提醒。升级从 GitHub 下载，请保持能连上 GitHub（建议先连接 EasyClash）；订阅和设置都会保留。v1.0.30 及更早的版本需要手动下载安装一次 v1.0.31。
+>
 > **安卓版从 v1.0.24 或更早版本升级到 v1.0.25 时，需要先卸载旧版再安装**（安装包换了固定签名，订阅和设置需要重新添加）；之后的版本都可以直接覆盖升级。
 
 以上链接永远指向最新版本；历史版本见 [Releases](../../releases)。所有文件由 GitHub Actions 在云端自动编译；安卓版从 v1.0.25 起用固定的发布密钥签名，可直接覆盖升级。

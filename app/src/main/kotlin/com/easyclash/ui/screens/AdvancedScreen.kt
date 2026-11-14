@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -251,6 +252,9 @@ fun AdvancedScreen(vm: MainViewModel) {
             }
         }
 
+        // ================= 版本与更新 =================
+        UpdateSection(vm)
+
         // ================= 关于 =================
         val appVer = remember { runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?" }
         SectionCard(title = "关于") {
@@ -374,5 +378,51 @@ private fun KeepAliveSection() {
         HelpText("自启动 / 后台活动：" + KeepAlive.romTip(), Modifier.padding(bottom = 4.dp))
         OutlinedButton(onClick = { KeepAlive.open(ctx, KeepAlive.appDetailsIntent(ctx)) }) { Text("打开本应用的系统设置") }
         HelpText("另外，在多任务界面把 EasyClash 的卡片锁住，一键清理时就不会被关掉。", Modifier.padding(top = 4.dp))
+    }
+}
+
+/** 版本与更新：检查、下载并覆盖安装、最近 3 个版本的更新内容 */
+@Composable
+private fun UpdateSection(vm: MainViewModel) {
+    val releases by vm.releases.collectAsStateWithLifecycle()
+    val err by vm.updateErr.collectAsStateWithLifecycle()
+    val progress by vm.updateProgress.collectAsStateWithLifecycle()
+    val checking by vm.checkingUpdate.collectAsStateWithLifecycle()
+    val latest = releases.firstOrNull()
+    val newer = latest?.takeIf { com.easyclash.data.Updater.newer(it.version, vm.currentVersion) }
+    SectionCard(
+        title = "版本与更新",
+        help = "检查更新：从 GitHub 读取最近 3 个版本的信息。每次打开 App 也会自动检查一次，有新版本时首页会提示。\n\n" +
+            "一键升级：从 GitHub 下载新版本安装包，交给系统安装器覆盖安装。所有版本签名相同，订阅和设置都会保留。" +
+            "第一次升级时系统会要求允许 EasyClash「安装未知应用」，允许一次即可。安装时 VPN 会断开，装好后重新打开 EasyClash 连接（开了「始终开启的 VPN」会自动连上）。\n\n" +
+            "注意：检查和下载都要访问 GitHub，国内直连常常不通。请先连接 EasyClash（连接后会自动走代理下载），或确认手机能打开 github.com。",
+    ) {
+        KeyValueRow("当前版本", "v${vm.currentVersion}")
+        KeyValueRow("最新版本", when {
+            latest == null -> if (checking) "检查中…" else "还没检查"
+            newer != null -> "v${latest.version}（有更新）"
+            else -> "v${latest.version}（已是最新）"
+        })
+        HelpText("升级要从 GitHub 下载，请保持能连上 GitHub（建议先连接 EasyClash）。", Modifier.padding(top = 4.dp))
+        err?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
+        progress?.let { (done, total) ->
+            val pct = if (total > 0) (done * 100 / total).toInt() else 0
+            Text("正在下载… ${if (total > 0) "$pct%" else humanBytes(done)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
+        }
+        Row(Modifier.padding(top = 8.dp)) {
+            OutlinedButton(onClick = { vm.checkUpdate() }, enabled = !checking && progress == null) { Text(if (checking) "检查中…" else "检查更新") }
+            if (newer != null) {
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { vm.installUpdate() }, enabled = progress == null && newer.apkUrl != null) { Text("升级到 v${newer.version}") }
+            }
+        }
+        if (newer != null && newer.apkUrl == null) HelpText("这个版本里没有找到安卓安装包，请到 GitHub 发布页手动下载。")
+        releases.forEach { r ->
+            Text(
+                "v${r.version}" + (if (r.date.isNotEmpty()) " · ${r.date}" else "") + (if (r.version == vm.currentVersion) "（当前）" else ""),
+                style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp),
+            )
+            HelpText(com.easyclash.data.Updater.plainNotes(r.notes).ifEmpty { "（没有更新说明）" })
+        }
     }
 }

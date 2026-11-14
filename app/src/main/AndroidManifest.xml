@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 后台常驻：弹出系统"允许在后台运行（不优化电池）"对话框 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- 原地升级：下载新版 APK 后交给系统安装器 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 分应用代理需要列出手机上安装的全部应用 -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -77,6 +79,16 @@
         <receiver
             android:name=".vpn.StopReceiver"
             android:exported="false" />
+        <!-- 升级：把下载好的 APK 共享给系统安装器 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- 通知栏"测速"按钮 -->
         <receiver
             android:name=".vpn.TestReceiver"

@@ -85,6 +85,7 @@ func main() {
 		}
 	}
 
+	cleanupAfterUpdate(dataDir) // 删掉上次升级留下的旧程序和安装包
 	store := openStore(dataDir)
 	if !*noSysProxy && recoverSystemProxy(dataDir) {
 		appendLog("[APP] 上次没有正常退出，已恢复原来的系统代理设置")
@@ -118,6 +119,9 @@ func main() {
 
 	if store.Settings().AutoConnect {
 		go app.Connect()
+	}
+	if !*headless {
+		go app.autoCheckUpdates() // 启动 1 分钟后检查新版本，之后每 12 小时一次
 	}
 
 	if *headless {

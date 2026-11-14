@@ -128,6 +128,7 @@ func (s *Server) state() map[string]any {
 		}
 	}
 	st["version"] = appVersion
+	st["update"] = updateJSON()
 	st["platform"] = runtime.GOOS // "windows" / "darwin"：界面据此切换说明文字
 	st["tunSupported"] = tunSupported
 	st["coreVersion"] = coreVersion()
@@ -365,6 +366,23 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		a.pendingImport = sv("url")
 		a.mu.Unlock()
 		s.ui.Show()
+		msg(w, "")
+	case "update/check":
+		if err := a.checkUpdate(); err != nil {
+			upd.mu.Lock()
+			e := upd.checkErr
+			upd.mu.Unlock()
+			msg(w, e)
+			return
+		}
+		msg(w, "")
+	case "update/install":
+		go func() {
+			if err := a.installUpdate(); err == nil {
+				time.Sleep(time.Second) // 让界面先显示"正在重新启动"
+				s.ui.RestartForUpdate()
+			}
+		}()
 		msg(w, "")
 	case "quit":
 		go s.ui.Quit()

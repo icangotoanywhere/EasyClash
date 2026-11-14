@@ -16,6 +16,7 @@ import com.easyclash.data.ProxyMode
 import com.easyclash.data.RuleProviderInfo
 import com.easyclash.data.Settings
 import com.easyclash.data.Subscription
+import com.easyclash.data.Updater
 import com.easyclash.vpn.EasyClashVpnService
 import com.easyclash.vpn.Status
 import com.easyclash.vpn.VpnState
@@ -61,6 +62,74 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val regionGroups get() = VpnState.regionGroups
 
     private var pollJob: Job? = null
+
+    // ---------- 检查更新与原地升级 ----------
+    val currentVersion: String = Updater.currentVersion(app)
+    private val _releases = MutableStateFlow<List<Updater.Release>>(emptyList())
+    /** 最近 3 个版本（新的在前） */
+    val releases: StateFlow<List<Updater.Release>> = _releases
+    private val _updateErr = MutableStateFlow<String?>(null)
+    val updateErr: StateFlow<String?> = _updateErr
+    /** 下载进度：null = 没在下载；否则 (已下载, 总大小) */
+    private val _updateProgress = MutableStateFlow<Pair<Long, Long>?>(null)
+    val updateProgress: StateFlow<Pair<Long, Long>?> = _updateProgress
+    private val _checkingUpdate = MutableStateFlow(false)
+    val checkingUpdate: StateFlow<Boolean> = _checkingUpdate
+
+    /** 有比当前更新的版本 */
+    fun latestNewer(): Updater.Release? = _releases.value.firstOrNull()?.takeIf { Updater.newer(it.version, currentVersion) }
+
+    /** 检查更新。manual=true 时把结果用提示条告诉用户 */
+    fun checkUpdate(manual: Boolean = true) = viewModelScope.launch {
+        if (_checkingUpdate.value) return@launch
+        _checkingUpdate.value = true
+        _updateErr.value = null
+        try {
+            _releases.value = Updater.fetchReleases(getApplication<Application>(), localProxyPort())
+            store.update { it.lastUpdateCheck = System.currentTimeMillis() }
+            if (manual) say(latestNewer()?.let { "发现新版本 v${it.version}" } ?: "已是最新版本")
+        } catch (e: Throwable) {
+            _updateErr.value = "检查更新失败：${e.message ?: e.javaClass.simpleName}。" + Updater.GITHUB_HINT
+        } finally {
+            _checkingUpdate.value = false
+        }
+    }
+
+    /** 下载最新版并交给系统安装器覆盖安装（订阅和设置保留） */
+    fun installUpdate() = viewModelScope.launch {
+        val ctx = getApplication<Application>()
+        val rel = latestNewer() ?: return@launch
+        if (_updateProgress.value != null) return@launch
+        if (!Updater.canInstall(ctx)) {
+            say("请先允许 EasyClash「安装未知应用」，返回后再点一次升级")
+            runCatching { ctx.startActivity(Updater.unknownSourcesIntent(ctx)) }
+            return@launch
+        }
+        _updateErr.value = null
+        _updateProgress.value = 0L to rel.apkSize
+        try {
+            val apk = Updater.download(ctx, rel, localProxyPort()) { done, total -> _updateProgress.value = done to total }
+            Updater.install(ctx, apk)
+        } catch (e: Throwable) {
+            _updateErr.value = "下载失败：${e.message ?: e.javaClass.simpleName}。" + Updater.GITHUB_HINT
+        } finally {
+            _updateProgress.value = null
+        }
+    }
+
+    init {
+        // 打开 App 20 秒后静默检查一次更新（失败不打扰），有新版本时首页提示；
+        // 没查到时（比如当时没连接、直连不了 GitHub），等连接成功后再静默查一次
+        viewModelScope.launch {
+            delay(20_000)
+            checkUpdate(manual = false)
+        }
+        viewModelScope.launch {
+            status.collect { s ->
+                if (s == Status.CONNECTED && _releases.value.isEmpty()) { delay(5_000); checkUpdate(manual = false) }
+            }
+        }
+    }
 
     init {
         // 连接状态变化时刷新节点列表并开始轮询
