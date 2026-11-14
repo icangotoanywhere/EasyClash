@@ -878,6 +878,12 @@ function pageAdvanced() {
     '\n\n退出软件时会自动断开并恢复原来的系统代理设置。',
     switchRow('开机自动启动', P('登录 Windows 后自动在托盘里启动（不弹窗口）。默认关。', '登录 Mac 后自动在菜单栏启动（不打开控制面板）。默认关。'), set.autoStart, null, (v) => setSetting({ autoStart: v })),
     switchRow('启动后自动连接', '软件一打开就自动连接正在用的订阅。默认关。', set.autoConnect, null, (v) => setSetting({ autoConnect: v })),
+    st.floatBallSupported ? switchRow('显示网络状态悬浮球', '桌面上一个可拖动的小球，显示出口国家和延迟，绿 / 黄 / 红表示连接好坏。默认关。', set.floatBall,
+      '小球定时检测这台电脑的出口 IP、所在地和延迟：绿色连接良好，黄色延迟较高，红色连不上。\n\n' +
+      '· 拖动可以移到任意位置；双击展开详情面板，显示位置、IP、运营商，以及 EasyClash 当前的线路（正在用的节点和延迟）。当前不是走 EasyClash 时显示「未使用代理」或「其他代理软件」。\n' +
+      '· 右键菜单：立即刷新、刷新间隔、不透明度、复制出口信息、隐藏悬浮球。\n\n' +
+      '检测出口用的是 ip-api.com 等公开查询接口，每次只发一个很小的请求。原来单独运行的 NetGateShow 可以关掉了。',
+      (v) => setSetting({ floatBall: v })) : null,
     h('div', { class: 'mt8' }, btn('设为 clash:// 一键导入的打开方式', () => act('claim-protocol', {}), 'outlined')),
     helpText('机场网页上的「一键导入 Clash」按钮会打开 clash:// 链接。点了没反应或打开的是别的软件时，点这个按钮让它交给本软件。', 'mt4')));
 

@@ -56,7 +56,7 @@
 
 同一套思路的电脑版，两个平台共用 `desktop/` 里的一份 Go 源码，功能（锁定出口地区、分程序代理、微软服务走国内……）与安卓版一致：
 
-- **Windows**：独立窗口（WebView2），系统代理或 TUN 模式，托盘常驻。
+- **Windows**：独立窗口（WebView2），系统代理或 TUN 模式，托盘常驻；可在「高级」页打开网络状态悬浮球（显示出口 IP、网速和当前节点线路）。
 - **macOS**：常驻顶部菜单栏，控制面板在浏览器里打开，系统代理模式。每个版本发布前都会在 GitHub 的云端 Mac 上自动测试一遍（连接、系统代理、断开恢复、异常退出恢复、`clash://` 链接等）。
 
 详见 [desktop/README.md](desktop/README.md)。自己编译：Windows 运行 `desktop\build-windows.ps1`，macOS 运行 `desktop/build-macos.sh`。

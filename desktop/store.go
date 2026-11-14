@@ -49,6 +49,7 @@ type Settings struct {
 	MixedPort          int               `json:"mixedPort"`
 	TestIntervalMin    int               `json:"testIntervalMin"` // 自动测速 / 自动选节点的周期（分钟）
 	AutoStart          bool              `json:"autoStart"`       // 开机自动启动
+	FloatBall          bool              `json:"floatBall"`       // 显示网络状态悬浮球（仅 Windows）
 	AutoConnect        bool              `json:"autoConnect"`     // 启动后自动连接
 	GeoAutoUpdate      bool              `json:"geoAutoUpdate"`
 	GeoLastCheck       int64             `json:"geoLastCheck"`

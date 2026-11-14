@@ -122,6 +122,7 @@ func main() {
 	}
 	if !*headless {
 		go app.autoCheckUpdates() // 启动 1 分钟后检查新版本，之后每 12 小时一次
+		applyFloatBall(app)       // 网络状态悬浮球（高级页开关，仅 Windows）
 	}
 
 	if *headless {

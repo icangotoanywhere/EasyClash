@@ -131,6 +131,7 @@ func (s *Server) state() map[string]any {
 	st["update"] = updateJSON()
 	st["platform"] = runtime.GOOS // "windows" / "darwin"：界面据此切换说明文字
 	st["tunSupported"] = tunSupported
+	st["floatBallSupported"] = floatBallSupported
 	st["coreVersion"] = coreVersion()
 	st["settings"] = a.store.Settings()
 	subs := a.store.Subs()
@@ -148,7 +149,7 @@ func (s *Server) state() map[string]any {
 // 改了这些设置不需要重载内核配置
 var noReloadKeys = map[string]bool{
 	"autoStart": true, "autoConnect": true, "geoAutoUpdate": true, "geoLastCheck": true, "geoLastAttempt": true,
-	"lockedRegion": true, "mode": true, "selectedSubId": true,
+	"lockedRegion": true, "mode": true, "selectedSubId": true, "floatBall": true,
 }
 
 func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
@@ -192,6 +193,9 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		after := a.store.Update(func(st *Settings) { _ = json.Unmarshal(raw, st) })
 		if before.AutoStart != after.AutoStart {
 			autoStartChanged = true
+		}
+		if before.FloatBall != after.FloatBall {
+			applyFloatBall(a)
 		}
 		if autoStartChanged {
 			if err := setAutoStart(after.AutoStart); err != nil {
