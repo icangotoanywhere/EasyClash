@@ -8,17 +8,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.drawable.Icon
 import android.net.VpnService
 import android.os.Build
-import android.os.PowerManager
 import android.os.ParcelFileDescriptor
 import com.easyclash.EasyClashApp
 import com.easyclash.R
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
 import com.easyclash.core.RegionLock
-import com.easyclash.core.Regions
 import com.easyclash.data.AppProxyMode
 import com.easyclash.data.ProxyMode
 import com.easyclash.ui.MainActivity
@@ -77,8 +74,6 @@ class EasyClashVpnService : VpnService() {
     private var nodeJob: Job? = null
     @Volatile private var nodeTitle: String? = null      // 例如 "🇯🇵 日本 · 东京 03"
     @Volatile private var nodeDelay: String = ""          // 例如 "延迟 85 ms"
-    @Volatile private var nodeDelayMs: Int = 0            // 状态栏图标用：>0 延迟，<0 超时，0 未测 / 不适用
-    @Volatile private var nodeCountry: String? = null     // 状态栏图标用：出口国家代码，例如 "JP"
     @Volatile private var leafName: String? = null        // 当前实际出口节点名（内核里的名字）
     @Volatile private var trafficText: String = ""
     @Volatile private var testing = false
@@ -228,8 +223,7 @@ class EasyClashVpnService : VpnService() {
             onData = { up, down ->
                 VpnState.setTraffic(up, down)
                 trafficText = "↑ ${human(up)}/s   ↓ ${human(down)}/s"
-                // 每秒一次，顺带驱动状态栏图标轮换。息屏时不刷新通知，省电；亮屏后下一秒就会更新
-                if (screenOn()) pushNotification()
+                pushNotification()
             },
             onClosed = { }
         )
@@ -297,7 +291,7 @@ class EasyClashVpnService : VpnService() {
         VpnState.setStatus(Status.STOPPING)
         maintJob?.cancel(); maintJob = null
         nodeJob?.cancel(); nodeJob = null
-        nodeTitle = null; nodeDelay = ""; nodeDelayMs = 0; nodeCountry = null; leafName = null; trafficText = ""; testing = false
+        nodeTitle = null; nodeDelay = ""; leafName = null; trafficText = ""; testing = false
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null
         withContext(Dispatchers.IO) { runCatching { core.Core.stop() } }
@@ -339,7 +333,7 @@ class EasyClashVpnService : VpnService() {
     private suspend fun refreshNodeInfo(api: CoreApi) {
         val s = EasyClashApp.instance.store.settings.value
         if (s.mode == ProxyMode.DIRECT) {
-            nodeTitle = "直连模式（不走代理）"; nodeDelay = ""; nodeDelayMs = 0; nodeCountry = null; leafName = null
+            nodeTitle = "直连模式（不走代理）"; nodeDelay = ""; leafName = null
             pushNotification(); return
         }
         // 沿策略组一路找到真实节点
@@ -361,13 +355,6 @@ class EasyClashVpnService : VpnService() {
             !found.alive -> "延迟 超时"
             else -> "延迟 未测"
         }
-        nodeDelayMs = when {
-            found.name == "DIRECT" || found.name == "REJECT" -> 0
-            found.delay > 0 -> found.delay
-            !found.alive -> -1
-            else -> 0
-        }
-        nodeCountry = if (found.name == "DIRECT" || found.name == "REJECT") null else (region ?: Regions.match(found.name))?.code
         pushNotification()
     }
 
@@ -409,24 +396,6 @@ class EasyClashVpnService : VpnService() {
         runCatching { getSystemService(NotificationManager::class.java).notify(NOTIFY_ID, buildNotification(body, title, withTest = true)) }
     }
 
-    private fun screenOn(): Boolean = getSystemService(PowerManager::class.java)?.isInteractive != false
-
-    /**
-     * 状态栏小图标：设置里打开「轮换显示」时，按设置的秒数在 EasyClash 图标、出口国家、延迟之间切换
-     * （由每秒一次的速度回调驱动）。没有国家或延迟时就少显示那一项。
-     */
-    private fun currentSmallIcon(): Icon? {
-        val s = EasyClashApp.instance.store.settings.value
-        if (!s.statusIconCycle || nodeTitle == null) return null
-        val items = mutableListOf<Icon?>(null)   // null = 默认的 EasyClash 图标
-        nodeCountry?.let { items += StatusIcon.country(it) }
-        if (nodeDelayMs != 0) items += StatusIcon.delay(nodeDelayMs)
-        if (items.size == 1) return null
-        val sec = s.statusIconSeconds.coerceIn(1, 3)
-        val i = ((System.currentTimeMillis() / 1000 / sec) % items.size).toInt()
-        return items[i]
-    }
-
     private fun buildNotification(text: String, title: String = "EasyClash", withTest: Boolean = false): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL) == null) {
@@ -451,11 +420,6 @@ class EasyClashVpnService : VpnService() {
             .setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PUBLIC)   // 锁屏上显示完整内容（节点、延迟、速度）
         if (withTest) {
-            currentSmallIcon()?.let { b.setSmallIcon(it) }
-            // 下拉后的通知卡片按延迟整卡上色：绿 < 200 ms、黄 < 500 ms、红 = 更慢或超时
-            if (EasyClashApp.instance.store.settings.value.statusIconCycle) {
-                StatusIcon.level(nodeDelayMs)?.let { b.setColor(it.color).setColorized(true) }
-            }
             val test = PendingIntent.getBroadcast(this, 2, Intent(this, TestReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
             b.addAction(Notification.Action.Builder(null, if (testing) "测速中…" else "测速", test).build())
         }

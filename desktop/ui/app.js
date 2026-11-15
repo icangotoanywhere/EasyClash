@@ -899,7 +899,7 @@ function pageAdvanced() {
       h('div', { class: 'logbox mono' }, st.crash.split('\n').slice(0, 14).join('\n')),
       h('div', { class: 'row mt8' },
         btn('复制崩溃记录', () => navigator.clipboard.writeText(st.crash).then(() => toast('已复制')), 'outlined'),
-        btn('清除', () => act('clear-crash', {}), 'text')),
+        btn('清除', () => confirmDialog('清除异常退出记录', '清除后这段记录就找不回来了。如果还没把它发给 Claude 排查，建议先点「复制崩溃记录」。\n\n确定要清除吗？', '清除', () => act('clear-crash', {})), 'text')),
       helpText('软件上次不是正常退出的，把这段复制发给 Claude 可以定位原因。'));
   }
   out.push(diag);

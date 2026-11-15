@@ -360,8 +360,13 @@ func (s *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		openFolder(a.dataDir)
 		msg(w, "")
 	case "clear-crash":
-		_ = os.Remove(filepath.Join(a.dataDir, "crash.txt"))
-		msg(w, "")
+		// crash.txt 被运行时一直开着（SetCrashOutput），Windows 上删不掉，所以清空内容而不是删除。
+		// 文件是追加模式打开的，清空后再崩溃会从头写入
+		if err := os.Truncate(filepath.Join(a.dataDir, "crash.txt"), 0); err != nil && !os.IsNotExist(err) {
+			writeErr(w, errors.New("清除失败："+err.Error()))
+			return
+		}
+		msg(w, "已清除异常退出记录")
 	case "show":
 		s.ui.Show()
 		msg(w, "")

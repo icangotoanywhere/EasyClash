@@ -210,26 +210,6 @@ fun AdvancedScreen(vm: MainViewModel) {
                 "通知里显示「断开」按钮", "默认不显示，免得误触。断开可以在 App 首页或下拉快捷开关里操作。",
                 settings.notifyStopButton,
             ) { v -> vm.updateSettings { it.notifyStopButton = v } }
-            SwitchRow(
-                "状态栏图标轮换显示出口国家和延迟",
-                "小图标轮流显示 EasyClash 图标、出口国家（如 JP）、延迟数字；通知卡片按延迟变成绿 / 黄 / 红。",
-                settings.statusIconCycle,
-                detail = "状态栏小图标只能是单色的，所以延迟好坏用形状区分：200 毫秒以内只显示数字，200～500 加一个方框，更慢或超时变成实心方块（超时显示 --）。\n\n" +
-                    "下拉通知栏后，通知卡片整张按延迟变色：绿色 = 200 毫秒以内，黄色 = 200～500，红色 = 更慢或超时。\n\n" +
-                    "出口国家按当前节点所属的地区显示，不额外联网。息屏时不刷新，不额外耗电。\n\n" +
-                    "部分手机系统在状态栏显示的是 App 原本的彩色图标，或者不显示通知图标，那样就看不到轮换。",
-            ) { v -> vm.updateSettings { it.statusIconCycle = v } }
-            if (settings.statusIconCycle) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1, 2, 3).forEach { n ->
-                        FilterChip(
-                            selected = settings.statusIconSeconds == n,
-                            onClick = { vm.updateSettings { it.statusIconSeconds = n } },
-                            label = { Text("每 $n 秒切换") },
-                        )
-                    }
-                }
-            }
             HelpText("把连接开关放到系统下拉菜单里。", Modifier.padding(top = 8.dp, bottom = 4.dp))
             if (Build.VERSION.SDK_INT >= 33) {
                 OutlinedButton(onClick = {
