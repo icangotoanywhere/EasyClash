@@ -193,11 +193,14 @@ function resolveLeaf(start) {
   }
   return cur;
 }
+// 「核实出口」组是 EasyClash 内部用的（锁定地区时核实节点实际出口，见 regionverify.go），界面上不显示
+const VERIFY_GROUP = 'EasyClash·核实出口';
 function parseProxies(raw) {
   const out = {};
   for (const [name, o] of Object.entries(raw.proxies || {})) {
+    if (name === VERIFY_GROUP) continue;
     const hist = o.history || [];
-    out[name] = { name, type: o.type || '', now: o.now || '', all: o.all || [], delay: hist.length ? hist[hist.length - 1].delay : 0 };
+    out[name] = { name, type: o.type || '', now: o.now || '', all: (o.all || []).filter((x) => x !== VERIFY_GROUP), delay: hist.length ? hist[hist.length - 1].delay : 0 };
   }
   return out;
 }

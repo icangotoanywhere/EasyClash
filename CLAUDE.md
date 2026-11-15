@@ -23,6 +23,7 @@ App 与内核之间：启动时生成完整的 mihomo YAML，之后切节点、�
 | 配置生成（地区组、规则、DNS、TUN） | `core/ConfigBuilder.kt` | `config.go` |
 | 地区表与节点归属 | `core/Regions.kt` | `regions.go` |
 | 锁定出口地区 | `core/RegionLock.kt`、`vpn/EasyClashVpnService.kt` | `app.go` |
+| 锁定地区时核实节点实际出口 | `core/RegionVerify.kt` | `regionverify.go` |
 | 设置项（含默认值、JSON 字段名） | `data/Models.kt` | `store.go`（`server.go` 的设置白名单也要同步） |
 | 界面文字 | `ui/screens/*.kt` | `desktop/ui/app.js` |
 | 出境直连失败转代理 + 国际 AI 服务禁止直连 | `core/fallback.go` | `desktop/fallback.go`（**逐字相同，只有包名不同**） |
@@ -62,6 +63,7 @@ App 与内核之间：启动时生成完整的 mihomo YAML，之后切节点、�
 - **网络状态悬浮球（v1.0.32，仅 Windows）**：来自维护者的独立小工具 NetGateShow（`D:\NetGateShow`），代码搬进 `desktop/floatball/`（`ball.go` 窗口与绘制、`net.go` 查出口 IP 用 ip-api.com、`win32.go` 系统调用），由 `floatball_windows.go` 按设置 `floatBall`（默认关）启停；macOS 的 `floatball_darwin.go` 是空实现，界面按状态里的 `floatBallSupported` 隐藏开关。展开后的「线路」「节点」两行（`Node.Text` / `Node.Detail`）每 5 秒调 `App.floatNode()`：EasyClash 已连接且（TUN 开着或系统代理指向本软件的端口）才显示节点；否则显示「未使用代理」或「其他代理软件（地址）」。右键「隐藏悬浮球」会把设置关掉。悬浮球自己的位置等存在数据目录的 `floatball.json`。**`floatball/win32.go` 的 `call()` 必须带 `//go:uintptrescapes`**：参数里有 `uintptr(unsafe.Pointer(&局部变量))`，少了这条指令，栈搬家后 Windows 会写进已释放的旧栈、破坏别的 goroutine（v1.0.32 就因此崩溃，崩溃记录是 `adjustpointers` / `invalid pointer found on stack`）。以后自己包装 Windows 接口调用都要这样做。安卓没有这个功能，不用同步。
 - **教训：状态栏图标和通知颜色不要指望。** v1.0.34 做过「状态栏小图标轮换显示国家 / 延迟 + 通知卡片按延迟上色」，维护者的荣耀手机（MagicOS）两样都不显示：状态栏用的是 App 的彩色桌面图标，`setColorized` 也被忽略。v1.0.35 整个删掉了（旧设置 `statusIconCycle`、`statusIconSeconds` 会被忽略）。钥匙形的 VPN 图标是系统画的，App 改不了。
 - **桌面「打开 Claude」图标（v1.0.36，仅安卓）**：高级页「通知与快捷开关」里的按钮用 `ShortcutManagerCompat.requestPinShortcut` 创建固定快捷方式（图标就是手机上 Claude App 自己的图标，**不要自己加角标**：桌面本身会给 App 创建的快捷方式叠上该 App 的小标，v1.0.36 自己加了一个，结果出现两个错开的小标，v1.0.37 去掉；打开 App 时 `refreshPinned` 会用 `updateShortcuts` 把已放在桌面上的图标刷新），指向 `ui/ClaudeGateActivity`（透明窗口 + 居中卡片）：显示 EasyClash 状态、Claude 会走的线路（开着「国际 AI 服务强制走代理」时从主组往下找，否则按首页模式）、出口 IP（连接时经内核本地端口查 ip-api.com，失败用 ipwho.is，和 NetGateShow 相同），并提醒：没连接、不经代理、Claude 被「应用」页排除、出口在 Claude 不服务的地区（`UNSUPPORTED`：CN、HK、MO、RU 等）。「打开」用 `getLaunchIntentForPackage("com.anthropic.claude")`，没装就跳应用商店。荣耀等系统要用户允许「创建桌面快捷方式」权限。
+- **锁定地区时核实节点实际出口（v1.0.38，三端）**：节点名标的地区不一定是实际出口。锁定地区后由 EasyClash 替内核在地区自动组里挑节点：按延迟排候选，当前钉住的仍活着且不比最快的慢 50 ms 以上就不动；否则逐个核实——配置里加一个包含全部节点的选择组 `EasyClash·核实出口`（`include-all`，界面不显示）和只监听 127.0.0.1 的 mixed 入口 `easyclash-verify`（`proxy` 指向这个组；安卓端口 16091，电脑版连接时选空闲端口 `verifyListenPort`），把组切到候选节点，经这个入口查 ip-api.com，国家代码一致才用 url-test 的固定选择钉住（`PUT /proxies/地区组`）；不一致写日志「[地区不符]」并跳过；全都不符合就不切。**用「钉住」而不是改成 select 组**：钉住的节点断了，内核仍会立刻（5 秒内 5 次失败或被拒）自己改用最快的可用节点，网络不断；EasyClash 每 30 秒检查一次，发现当前用的不是核实过的节点就重新核实。解除锁定或连接时没锁定，取消钉住（`DELETE /proxies/地区组`，store-selected 会把钉住带到下次连接）。核实结果缓存 6 小时，每轮最多查 5 个新节点（ip-api.com 免费版每分钟 45 次）。没锁定地区时不做核实，自动组照旧由内核选。
 - 一键推荐之类的功能**不接任何 AI**（维护者决定：不上传用户的 App 列表）。
 - **内核版本**：mihomo 固定为 `v1.19.33`（`build.yml` 的 `MIHOMO_VERSION`、`desktop/go.mod`）。电脑版的 `core.go` 用到了它的地理数据库更新接口，升级内核要两边一起测。`core/go.mod` 里写的 v1.19.12 已经过时，编译时会被 CI 覆盖。
 

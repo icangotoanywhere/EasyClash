@@ -105,6 +105,12 @@ func (c *CoreAPI) Select(group, name string) error {
 	return err
 }
 
+// Unfix 取消自动测速组的固定选择（锁定地区时核实后钉住的节点），内核恢复按延迟自动选
+func (c *CoreAPI) Unfix(group string) error {
+	_, err := c.call("DELETE", "/proxies/"+esc(group), nil)
+	return err
+}
+
 // GroupDelay 测整个策略组（内核并发测，比逐个测快得多）
 func (c *CoreAPI) GroupDelay(group string) map[string]int {
 	b, err := c.call("GET", "/group/"+esc(group)+"/delay?timeout=5000&url="+url.QueryEscape("https://www.gstatic.com/generate_204"), nil)

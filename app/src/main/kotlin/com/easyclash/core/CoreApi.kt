@@ -81,6 +81,11 @@ class CoreApi(private val port: Int, private val secret: String) {
         call(req("/proxies/${enc(group)}").put(body))
     }
 
+    /** 取消自动测速组的固定选择（锁定地区时 RegionVerify 钉住的节点），内核恢复按延迟自动选 */
+    suspend fun unfix(group: String) {
+        call(req("/proxies/${enc(group)}").delete())
+    }
+
     /** 测单个节点延迟，返回毫秒；超时或失败返回 0 */
     suspend fun delay(name: String, timeoutMs: Int = 5000): Int = runCatching {
         JSONObject(call(req("/proxies/${enc(name)}/delay?timeout=$timeoutMs&url=${enc("https://www.gstatic.com/generate_204")}"))).optInt("delay", 0)
