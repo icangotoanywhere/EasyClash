@@ -62,6 +62,16 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
 
+        <!-- 桌面「打开 Claude」快捷方式：先显示网络情况，确认后拉起 Claude App -->
+        <activity
+            android:name=".ui.ClaudeGateActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:taskAffinity="com.easyclash.claudegate"
+            android:theme="@style/Theme.EasyClash.Gate" />
+
         <service
             android:name=".vpn.EasyClashVpnService"
             android:exported="false"
