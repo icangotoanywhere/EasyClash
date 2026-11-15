@@ -9,6 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -48,6 +53,14 @@ class EasyClashVpnService : VpnService() {
         private const val CHANNEL = "easyclash_status"
         private const val OLD_CHANNEL = "easyclash_vpn"
         private const val NOTIFY_ID = 1
+        // 通知大图标按延迟变色：≤150 ms 绿，≤300 ms 黄，更慢或超时红，未测灰
+        private const val DELAY_NONE = -2       // 直连 / 拒绝 / 无数据：不画图标
+        private const val DELAY_TIMEOUT = -1
+        private const val COLOR_GOOD = 0xFF2E9E5B.toInt()
+        private const val COLOR_OK = 0xFFF2A100.toInt()
+        private const val COLOR_BAD = 0xFFE53935.toInt()
+        private const val COLOR_UNKNOWN = 0xFF9E9E9E.toInt()
+        private val FLAG_REGEX = Regex("[\\x{1F1E6}-\\x{1F1FF}]{2}\\s*")   // 国旗 emoji = 两个区域指示符（U+1F1E6..U+1F1FF）
         const val CONTROLLER_PORT = 16090
         private const val GEO_CHECK_INTERVAL = 7L * 24 * 3600 * 1000   // 地理数据库每 7 天检查一次
         private const val GEO_RETRY_INTERVAL = 12L * 3600 * 1000       // 失败后 12 小时内不再自动重试
@@ -73,8 +86,11 @@ class EasyClashVpnService : VpnService() {
 
     // 通知栏显示的内容：当前节点、最近一次延迟、实时速度。节点信息每 10 秒从内核刷新一次
     private var nodeJob: Job? = null
-    @Volatile private var nodeTitle: String? = null      // 例如 "🇯🇵 日本 · 东京 03"
+    @Volatile private var nodeTitle: String? = null      // 例如 "日本 · 东京 03"（不带国旗）
     @Volatile private var nodeDelay: String = ""          // 例如 "延迟 85 ms"
+    @Volatile private var nodeDelayMs: Int = DELAY_NONE   // 延迟数值，通知图标按它变色：>0 毫秒，0 未测，DELAY_TIMEOUT 超时，DELAY_NONE 不画图标
+    private var iconKey: String? = null                   // 通知图标缓存：颜色和数字没变就不重画
+    private var iconBmp: Bitmap? = null
     @Volatile private var leafName: String? = null        // 当前实际出口节点名（内核里的名字）
     @Volatile private var trafficText: String = ""
     @Volatile private var testing = false
@@ -369,7 +385,7 @@ class EasyClashVpnService : VpnService() {
         claudeJob?.cancel(); claudeJob = null
         screenOffReceiver?.let { runCatching { unregisterReceiver(it) } }; screenOffReceiver = null
         ClaudeGuard.reset()
-        nodeTitle = null; nodeDelay = ""; leafName = null; trafficText = ""; testing = false
+        nodeTitle = null; nodeDelay = ""; nodeDelayMs = DELAY_NONE; leafName = null; trafficText = ""; testing = false
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null
         withContext(Dispatchers.IO) { runCatching { core.Core.stop() } }
@@ -412,7 +428,7 @@ class EasyClashVpnService : VpnService() {
     private suspend fun refreshNodeInfo(api: CoreApi) {
         val s = EasyClashApp.instance.store.settings.value
         if (s.mode == ProxyMode.DIRECT) {
-            nodeTitle = "直连模式（不走代理）"; nodeDelay = ""; leafName = null
+            nodeTitle = "直连模式（不走代理）"; nodeDelay = ""; nodeDelayMs = DELAY_NONE; leafName = null
             pushNotification(); return
         }
         // 沿策略组一路找到真实节点
@@ -425,14 +441,21 @@ class EasyClashVpnService : VpnService() {
         }
         val found = leaf ?: return
         leafName = found.name
-        val shown = when (found.name) { "DIRECT" -> "直连"; "REJECT" -> "拒绝"; else -> found.name }
+        // 通知里不显示国旗：地区名前不加旗帜，节点名里订阅自带的旗帜 emoji 也去掉（名称和代码保留）
+        val shown = when (found.name) { "DIRECT" -> "直连"; "REJECT" -> "拒绝"; else -> stripFlags(found.name) }
         val region = lockedRegion(s.lockedRegion)
-        nodeTitle = if (region != null) "${region.flag} ${region.displayName} · $shown" else shown
+        nodeTitle = if (region != null) "${region.displayName} · $shown" else shown
         nodeDelay = when {
             found.name == "DIRECT" || found.name == "REJECT" -> ""
             found.delay > 0 -> "延迟 ${found.delay} ms"
             !found.alive -> "延迟 超时"
             else -> "延迟 未测"
+        }
+        nodeDelayMs = when {
+            found.name == "DIRECT" || found.name == "REJECT" -> DELAY_NONE
+            found.delay > 0 -> found.delay
+            !found.alive -> DELAY_TIMEOUT
+            else -> 0
         }
         pushNotification()
     }
@@ -499,6 +522,9 @@ class EasyClashVpnService : VpnService() {
             .setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PUBLIC)   // 锁屏上显示完整内容（节点、延迟、速度）
         if (withTest) {
+            // 按延迟变色的大图标（绿 / 黄 / 红 / 灰，里面写延迟数字）。普通图片，各家系统一般都会显示；
+            // 整张卡片的背景色（setColorized）在荣耀 MagicOS 上被忽略，别再试
+            delayIcon(nodeDelayMs)?.let { b.setLargeIcon(it) }
             val test = PendingIntent.getBroadcast(this, 2, Intent(this, TestReceiver::class.java), PendingIntent.FLAG_IMMUTABLE)
             b.addAction(Notification.Action.Builder(null, if (testing) "测速中…" else "测速", test).build())
         }
@@ -507,6 +533,40 @@ class EasyClashVpnService : VpnService() {
             b.addAction(Notification.Action.Builder(null, "断开", stop).build())
         }
         return b.build()
+    }
+
+    /** 去掉名称里的国旗 emoji（两个区域指示符组成一个旗帜），顺手去掉它后面的空格 */
+    private fun stripFlags(s: String): String =
+        s.replace(FLAG_REGEX, "").trim().ifEmpty { s }
+
+    /** 画通知大图标：圆形底色表示延迟好坏，白字写延迟毫秒数；DELAY_NONE 返回 null（不画） */
+    @Synchronized
+    private fun delayIcon(ms: Int): Bitmap? {
+        if (ms == DELAY_NONE) return null
+        val (color, label) = when {
+            ms == DELAY_TIMEOUT -> COLOR_BAD to "×"
+            ms <= 0 -> COLOR_UNKNOWN to "?"
+            ms <= 150 -> COLOR_GOOD to ms.toString()
+            ms <= 300 -> COLOR_OK to ms.toString()
+            else -> COLOR_BAD to ms.toString()
+        }
+        val key = "$color/$label"
+        if (key == iconKey) return iconBmp
+        val size = 160
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.color = color
+        c.drawCircle(size / 2f, size / 2f, size / 2f, p)
+        p.color = Color.WHITE
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textAlign = Paint.Align.CENTER
+        p.textSize = when (label.length) { 1 -> 88f; 2 -> 76f; 3 -> 60f; 4 -> 46f; else -> 38f }
+        val y = size / 2f - (p.descent() + p.ascent()) / 2f
+        c.drawText(label, size / 2f, y, p)
+        iconKey = key
+        iconBmp = bmp
+        return bmp
     }
 
     private fun updateNotification(text: String) {
