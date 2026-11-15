@@ -146,11 +146,7 @@ class EasyClashVpnService : VpnService() {
             if (!ok) throw IllegalStateException("内核已启动但控制接口无响应")
             // 从一开始就收集内核日志（含 TUN 启动失败等只在启动时出现的错误）
             logWs?.cancel()
-            logWs = api.logSocket(settings.logLevel) { type, payload ->
-                VpnState.appendLog("[${type.uppercase()}] $payload")
-                // Claude 联网前先确认：Claude 的连接被挡住时发通知，点它去检查并放行
-                if (payload.contains(ConfigBuilder.CLAUDE_GATE)) ClaudeGuard.onLogLine(this@EasyClashVpnService, payload)
-            }
+            logWs = api.logSocket(settings.logLevel) { type, payload -> VpnState.appendLog("[${type.uppercase()}] $payload") }
             VpnState.appendLog("[APP] 内核控制接口已就绪，版本 ${api.version()}")
             // 把内核实际生效的 tun / dns 配置记下来：TUN 启动失败时内核会把 tun.enable 改成 false
             runCatching {

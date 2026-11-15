@@ -1,16 +1,8 @@
 package com.easyclash.vpn
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import com.easyclash.R
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
 import com.easyclash.data.Settings
-import com.easyclash.ui.ClaudeGateActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -21,17 +13,13 @@ import kotlinx.coroutines.flow.StateFlow
  * 的规则指向它（排在国际 AI 服务规则前面）。平时选 REJECT：Claude 的连接一律被挡住；用户在「打开 Claude」检查卡片上点「打开」后
  * 切到主组放行，到时间（锁屏 / 30 分钟 / 2 小时，见设置 claudeAllowMinutes）再切回 REJECT，并断开已有的 Claude 连接。
  * 只比域名、切组走内核接口，不查连接属于哪个 App，也不用重载配置（教训见 CLAUDE.md「不要按连接查所属 App」）。
- * 被挡住时，日志里会出现「… using EasyClash·Claude 放行[REJECT]」，服务据此发一条通知，点它打开检查卡片（每分钟最多一条）。
+ * Claude 从原版图标、多任务切到前台时，由可选的无障碍服务 ClaudeWatchService 弹出检查卡片（v1.0.41 起不再用通知提醒）。
  */
 object ClaudeGuard {
     /** 放行到什么时候（毫秒时间戳）；0 = 挡住；Long.MAX_VALUE = 到锁屏为止 */
     @Volatile private var allowedUntil = 0L
     private val _allowed = MutableStateFlow(false)
     val allowed: StateFlow<Boolean> = _allowed
-
-    private const val CHANNEL = "easyclash_claude_guard"
-    private const val NOTIFY_ID = 7
-    @Volatile private var lastNotify = 0L
 
     fun isOn(s: Settings) = s.claudeConfirm
 
@@ -82,32 +70,4 @@ object ClaudeGuard {
         val h = host.lowercase().trimEnd('.')
         return ConfigBuilder.CLAUDE_DOMAINS.any { h == it || h.endsWith(".$it") }
     }
-
-    /** 内核日志里出现 Claude 的连接被这个组挡住时，提醒用户去检查并放行 */
-    fun onLogLine(ctx: Context, line: String) {
-        if (!line.contains(ConfigBuilder.CLAUDE_GATE) || !line.contains("REJECT")) return
-        // 开着无障碍服务时，Claude 一到前台就会弹卡片，不用再发通知
-        if (ClaudeWatchService.enabled(ctx)) return
-        val now = System.currentTimeMillis()
-        if (now - lastNotify < 60_000) return
-        lastNotify = now
-        val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
-        if (nm.getNotificationChannel(CHANNEL) == null) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, "Claude 联网确认", NotificationManager.IMPORTANCE_HIGH))
-        }
-        val open = PendingIntent.getActivity(
-            ctx, 3, Intent(ctx, ClaudeGateActivity::class.java).setAction(Intent.ACTION_VIEW).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val n = Notification.Builder(ctx, CHANNEL)
-            .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("Claude 想联网，已被挡住")
-            .setContentText("点这里先看一眼网络，确认后放行")
-            .setContentIntent(open)
-            .setAutoCancel(true)
-            .build()
-        runCatching { nm.notify(NOTIFY_ID, n) }
-    }
-
-    fun cancelNotice(ctx: Context) { runCatching { ctx.getSystemService(NotificationManager::class.java)?.cancel(NOTIFY_ID) } }
 }

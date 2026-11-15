@@ -177,7 +177,6 @@ class ClaudeGateActivity : ComponentActivity() {
         val api = VpnState.api
         if (s.claudeConfirm && isPinned(this) && api != null && VpnState.status.value == Status.CONNECTED) {
             kotlinx.coroutines.runBlocking { ClaudeGuard.allow(api, VpnState.mainGroup, s.claudeAllowMinutes) }
-            ClaudeGuard.cancelNotice(this)
         }
         if (intercept) { finish(); return }   // Claude 就在卡片后面，关掉卡片就露出来了（它会自己重连）
         val i = packageManager.getLaunchIntentForPackage(CLAUDE_PKG)

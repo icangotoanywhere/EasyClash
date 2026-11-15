@@ -12,7 +12,7 @@ import com.easyclash.ui.ClaudeGateActivity
  *
  * 只在「Claude 联网前先确认」正在生效（[ClaudeGuard.active]）、并且当前是挡住状态时，Claude 一来到前台
  * （原版图标、多任务、通知……），立刻弹出检查卡片盖在 Claude 上面：「打开」= 放行并露出 Claude，「取消」= 回桌面、继续挡住。
- * 没开这个服务时，后台服务不能弹界面（安卓限制），只能靠通知提醒。
+ * 没开这个服务时，后台服务不能弹界面（安卓限制），只能从桌面的「打开 Claude」图标进去放行。
  *
  * 只接收窗口切换事件、只看包名（canRetrieveWindowContent=false），不读屏幕内容。
  * 要收所有 App 的事件，才能分辨「从别处切进 Claude」和「在 Claude 里面换页面」。和 To Claude 的 GateService 同一个做法。
