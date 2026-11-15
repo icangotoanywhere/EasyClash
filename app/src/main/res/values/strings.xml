@@ -4,4 +4,8 @@
     <string name="notification_channel">连接状态</string>
     <string name="shortcut_connect">连接</string>
     <string name="shortcut_disconnect">断开</string>
+    <string name="acc_label">EasyClash：Claude 切到前台时先检查网络</string>
+    <string name="acc_desc">配合 EasyClash「高级 → Claude 专用」里的「Claude 联网前先确认」使用：Claude 被挡住时，不管从原版图标、多任务还是通知打开 Claude，都会立刻弹出网络检查卡片，点「打开」放行，点「取消」回到桌面。已经放行、或没开「Claude 联网前先确认」时不打扰。
+
+本服务只接收「哪个 App 来到了前台」的通知（只有 App 的包名），用来认出 Claude；不读取屏幕上的任何文字和内容，不收集、不上传任何信息。系统的提示是所有无障碍服务通用的说法。</string>
 </resources>

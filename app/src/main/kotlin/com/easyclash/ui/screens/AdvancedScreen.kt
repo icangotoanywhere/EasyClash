@@ -259,7 +259,7 @@ fun AdvancedScreen(vm: MainViewModel) {
                     "• 平时 Claude 的网站（claude.ai、claude.com、anthropic.com、claudeusercontent.com）一律连不上，Claude App 会显示网络错误，这是正常的；\n" +
                     "• 从桌面的「打开 Claude」图标进去，看过网络卡片后点「打开」，才放行；\n" +
                     "• 放行多久在下面选：直到锁屏（默认）、30 分钟或 2 小时。到时间后重新挡住，已经连上的 Claude 连接也会断开，Claude 里会提示网络错误，再从图标进一次就行；\n" +
-                    "• 直接点了原版 Claude 图标也没关系：Claude 一联网被挡住，通知栏会弹一条「Claude 想联网，已被挡住」，点它就能打开检查卡片放行（每分钟最多提醒一次；需要「日志级别」是 info 或 debug，默认就是 info）。\n\n" +
+                    "• 直接点了原版 Claude 图标、或从多任务切回 Claude：打开下面的「Claude 切到前台时自动弹出检查」，会立刻弹出检查卡片；不开的话，Claude 一联网被挡住，通知栏会弹一条「Claude 想联网，已被挡住」，点它也能打开检查卡片放行（每分钟最多提醒一次；需要「日志级别」是 info 或 debug，默认就是 info）。\n\n" +
                     "说明：\n" +
                     "• 是按网站挡的，不分 App：手机浏览器里打开 claude.ai 也会被挡，同样从图标放行即可；\n" +
                     "• 只在规则模式下起作用；全局模式、直连模式不挡；\n" +
@@ -278,6 +278,31 @@ fun AdvancedScreen(vm: MainViewModel) {
                     }
                 }
                 val allowedNow by com.easyclash.vpn.ClaudeGuard.allowed.collectAsStateWithLifecycle()
+                // 可选：无障碍服务，Claude 一到前台（多任务、原版图标、通知）就弹检查卡片
+                var watchOn by remember { mutableStateOf(com.easyclash.vpn.ClaudeWatchService.enabled(ctx)) }
+                androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                    watchOn = com.easyclash.vpn.ClaudeWatchService.enabled(ctx)
+                    onPauseOrDispose { }
+                }
+                SettingRow(
+                    "Claude 切到前台时自动弹出检查",
+                    (if (watchOn) "已开启。" else "未开启：从多任务或原版图标进 Claude 时只会在通知栏提醒。") +
+                        "要在系统「无障碍」里手动打开。",
+                    detail = "作用：Claude 被挡住时，不管从原版图标、多任务（后台切回来）还是通知进入 Claude，都立刻弹出检查卡片盖在 Claude 上面：" +
+                        "点「打开」= 放行并露出 Claude（它会自己重新连上），点「取消」或返回键 = 回到桌面、继续挡住。已经放行时不打扰。\n\n" +
+                        "为什么要无障碍：安卓不允许后台服务直接弹出界面，也不告诉别的 App「现在谁在前台」。不开这个服务时，只能在 Claude 联网被挡住时发一条通知，需要你去点。\n\n" +
+                        "怎么开：点右边的按钮进入系统「无障碍」设置，找到「EasyClash：Claude 切到前台时先检查网络」（荣耀 / 华为一般在「已安装的服务」或「已下载的应用」里），打开它。" +
+                        "系统会提示它「能查看屏幕上的所有内容」——这是所有无障碍服务通用的说法；EasyClash 只接收「哪个 App 来到了前台」的通知（只有 App 的包名），" +
+                        "不读取屏幕上的任何文字和内容，不收集、不上传任何信息。\n\n" +
+                        "要知道的事：\n" +
+                        "• 安卓不允许拦住别的 App 启动，卡片是「盖住」不是「拦住」；不过这时 Claude 的网络本来就被挡着，卡片弹出前它连不上任何东西。\n" +
+                        "• 手机省电时可能会悄悄关掉无障碍服务；发现不弹了，回来看这里是不是变成了未开启。\n" +
+                        "• 只在「Claude 联网前先确认」正在生效（开关开着、桌面有「打开 Claude」图标、已连接）时才会弹。",
+                ) {
+                    OutlinedButton(onClick = {
+                        runCatching { ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }) { Text(if (watchOn) "去关闭" else "去开启") }
+                }
                 if (!pinned) HelpText("现在：没有「打开 Claude」图标，不看管 Claude。", Modifier.padding(top = 4.dp))
                 else if (status == Status.CONNECTED) HelpText(
                     if (allowedNow) "现在：已放行（${com.easyclash.vpn.ClaudeGuard.remainingText() ?: ""}）" else "现在：已挡住",

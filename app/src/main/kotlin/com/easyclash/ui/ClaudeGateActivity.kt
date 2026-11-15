@@ -80,6 +80,8 @@ class ClaudeGateActivity : ComponentActivity() {
 
     companion object {
         const val CLAUDE_PKG = "com.anthropic.claude"
+        /** 由无障碍服务弹出：Claude 已经在卡片后面了，「打开」= 放行并关掉卡片，「取消」= 回桌面 */
+        const val EXTRA_INTERCEPT = "intercept"
         private const val SHORTCUT_ID = "open-claude"
 
         fun claudeInstalled(ctx: Context): Boolean = ctx.packageManager.getLaunchIntentForPackage(CLAUDE_PKG) != null
@@ -145,13 +147,26 @@ class ClaudeGateActivity : ComponentActivity() {
         }.getOrElse { IconCompat.createWithResource(ctx, R.mipmap.ic_launcher) }
     }
 
+    private var intercept = false
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intercept = intent.getBooleanExtra(EXTRA_INTERCEPT, false)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intercept = intent?.getBooleanExtra(EXTRA_INTERCEPT, false) == true
+        // 拦截时返回键 = 取消（直接关掉卡片就等于让 Claude 留在前台、又没放行）
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = cancel()
+        })
         setContent {
             val dark = isSystemInDarkTheme()
             val scheme = if (dark) darkColorScheme(primary = Color(0xFF8AB4F8)) else lightColorScheme(primary = Color(0xFF1E6FD9))
             MaterialTheme(colorScheme = scheme) {
-                Gate(onCancel = { finish() }, onOpen = { openClaude() }, onConnect = { connect() })
+                Gate(onCancel = { cancel() }, onOpen = { openClaude() }, onConnect = { connect() })
             }
         }
     }
@@ -164,6 +179,7 @@ class ClaudeGateActivity : ComponentActivity() {
             kotlinx.coroutines.runBlocking { ClaudeGuard.allow(api, VpnState.mainGroup, s.claudeAllowMinutes) }
             ClaudeGuard.cancelNotice(this)
         }
+        if (intercept) { finish(); return }   // Claude 就在卡片后面，关掉卡片就露出来了（它会自己重连）
         val i = packageManager.getLaunchIntentForPackage(CLAUDE_PKG)
         if (i != null) {
             startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -171,6 +187,13 @@ class ClaudeGateActivity : ComponentActivity() {
             // 没装 Claude：打开应用商店的 Claude 页面
             val ok = runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$CLAUDE_PKG")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
             if (!ok) Toast.makeText(this, "这台手机上没有安装 Claude App", Toast.LENGTH_LONG).show()
+        }
+        finish()
+    }
+
+    private fun cancel() {
+        if (intercept) {
+            runCatching { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
         finish()
     }

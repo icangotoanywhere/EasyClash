@@ -35,6 +35,9 @@ object ClaudeGuard {
 
     fun isOn(s: Settings) = s.claudeConfirm
 
+    /** 正在看管 Claude（设置开着、桌面有图标、已连接）。无障碍服务据此决定要不要弹卡片 */
+    @Volatile var active = false
+
     /** 还剩多久（给界面显示）：null = 挡住；"直到锁屏"；"还剩 N 分钟" */
     fun remainingText(): String? {
         val u = allowedUntil
@@ -73,7 +76,7 @@ object ClaudeGuard {
 
     fun expired(): Boolean { val u = allowedUntil; return u == 0L || (u != Long.MAX_VALUE && System.currentTimeMillis() >= u) }
     fun untilScreenOff() = allowedUntil == Long.MAX_VALUE
-    fun reset() { allowedUntil = 0L; _allowed.value = false }
+    fun reset() { allowedUntil = 0L; _allowed.value = false; active = false }
 
     fun isClaudeHost(host: String): Boolean {
         val h = host.lowercase().trimEnd('.')
@@ -83,6 +86,8 @@ object ClaudeGuard {
     /** 内核日志里出现 Claude 的连接被这个组挡住时，提醒用户去检查并放行 */
     fun onLogLine(ctx: Context, line: String) {
         if (!line.contains(ConfigBuilder.CLAUDE_GATE) || !line.contains("REJECT")) return
+        // 开着无障碍服务时，Claude 一到前台就会弹卡片，不用再发通知
+        if (ClaudeWatchService.enabled(ctx)) return
         val now = System.currentTimeMillis()
         if (now - lastNotify < 60_000) return
         lastNotify = now

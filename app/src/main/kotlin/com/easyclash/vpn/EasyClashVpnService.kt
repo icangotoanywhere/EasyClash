@@ -225,6 +225,7 @@ class EasyClashVpnService : VpnService() {
             return
         }
         ClaudeGuard.apply(api, mainGroup)
+        ClaudeGuard.active = true
         claudeJob = bgScope.launch {
             while (isActive) {
                 delay(20_000)
