@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
 
         promptAddTileOnce()
+        ClaudeGateActivity.refreshPinned(this)   // 桌面「打开 Claude」图标换成最新样子
 
         setContent {
             val dark = isSystemInDarkTheme()

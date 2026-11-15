@@ -205,7 +205,7 @@ fun AdvancedScreen(vm: MainViewModel) {
         KeepAliveSection()
 
         // ================= 通知与快捷开关 =================
-        SectionCard(title = "通知与快捷开关", help = "常驻通知：连接后通知栏（和锁屏）上显示当前节点、最近一次延迟和速度，带「测速」按钮。\n\n打开 Claude 图标：桌面上的「Claude」图标（右下角带 EasyClash 小标）由 EasyClash 创建。点开先看网络：EasyClash 有没有连接、Claude 会走哪个节点、出口 IP 在哪；发现没走代理、出口在 Claude 不服务的地区（中国大陆、香港、澳门、俄罗斯等）或 Claude 被「应用」页排除时会提醒。确认后点「打开」拉起 Claude App。查出口 IP 用的是 ip-api.com（失败时用 ipwho.is）。如果点了按钮桌面上没出现图标，请在系统设置里允许 EasyClash「创建桌面快捷方式」。\n\n快捷开关：在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
+        SectionCard(title = "通知与快捷开关", help = "常驻通知：连接后通知栏（和锁屏）上显示当前节点、最近一次延迟和速度，带「测速」按钮。\n\n打开 Claude 图标：桌面上的「Claude」图标由 EasyClash 创建（桌面一般会自动在角上标出 EasyClash 的小图标）。点开先看网络：EasyClash 有没有连接、Claude 会走哪个节点、出口 IP 在哪；发现没走代理、出口在 Claude 不服务的地区（中国大陆、香港、澳门、俄罗斯等）或 Claude 被「应用」页排除时会提醒。确认后点「打开」拉起 Claude App。查出口 IP 用的是 ip-api.com（失败时用 ipwho.is）。如果点了按钮桌面上没出现图标，请在系统设置里允许 EasyClash「创建桌面快捷方式」。\n\n快捷开关：在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
             SwitchRow(
                 "通知里显示「断开」按钮", "默认不显示，免得误触。断开可以在 App 首页或下拉快捷开关里操作。",
                 settings.notifyStopButton,

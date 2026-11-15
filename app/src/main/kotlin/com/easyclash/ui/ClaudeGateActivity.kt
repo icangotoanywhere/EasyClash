@@ -4,8 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.drawable.Drawable
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -85,36 +84,59 @@ class ClaudeGateActivity : ComponentActivity() {
         fun claudeInstalled(ctx: Context): Boolean = ctx.packageManager.getLaunchIntentForPackage(CLAUDE_PKG) != null
 
         /**
-         * 请桌面添加快捷方式。返回给用户看的提示。
-         * 图标：手机上 Claude App 自己的图标，右下角叠一个 EasyClash 小标，和真正的 Claude 图标区分开；没装 Claude 时用 EasyClash 图标。
+         * 请桌面添加快捷方式。返回给用户看的提示。已经添加过的就只更新图标（老版本带 EasyClash 小标的图标会换掉）。
+         * 图标就是手机上 Claude App 自己的图标，不加角标：桌面本身会给「由某个 App 创建的快捷方式」叠一个该 App 的小标，
+         * 自己再加一个就会出现两个错开的小标（v1.0.36 的问题）。没装 Claude 时用 EasyClash 图标。
          */
         fun pinShortcut(ctx: Context): String {
+            val info = shortcutInfo(ctx)
+            val pinned = runCatching {
+                ShortcutManagerCompat.getShortcuts(ctx, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == SHORTCUT_ID }
+            }.getOrDefault(false)
+            if (pinned) {
+                val ok = runCatching { ShortcutManagerCompat.updateShortcuts(ctx, listOf(info)) }.getOrDefault(false)
+                return if (ok) "桌面上已经有这个图标了，已更新它的样子。" else "桌面上已经有这个图标了。"
+            }
             if (!ShortcutManagerCompat.isRequestPinShortcutSupported(ctx)) return "这台手机的桌面不支持由 App 添加快捷方式。"
-            val icon = runCatching { IconCompat.createWithBitmap(badgedIcon(ctx, ctx.packageManager.getApplicationIcon(CLAUDE_PKG))) }
-                .getOrElse { IconCompat.createWithResource(ctx, R.mipmap.ic_launcher) }
-            val info = ShortcutInfoCompat.Builder(ctx, SHORTCUT_ID)
-                .setShortLabel("Claude")
-                .setLongLabel("先看网络再打开 Claude")
-                .setIcon(icon)
-                .setIntent(Intent(ctx, ClaudeGateActivity::class.java).setAction(Intent.ACTION_VIEW))
-                .build()
             val ok = runCatching { ShortcutManagerCompat.requestPinShortcut(ctx, info, null) }.getOrDefault(false)
             return if (ok) "已请求添加。如果桌面上没出现，请到系统设置 → 应用 → EasyClash → 权限，允许「创建桌面快捷方式」后再试。"
             else "添加失败：桌面拒绝了请求。请到系统设置 → 应用 → EasyClash → 权限，允许「创建桌面快捷方式」后再试。"
         }
 
-        private fun badgedIcon(ctx: Context, base: Drawable): Bitmap {
-            val size = 192
-            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-            val c = Canvas(bmp)
-            base.setBounds(0, 0, size, size); base.draw(c)
-            val badge = ctx.packageManager.getApplicationIcon(ctx.packageName)
-            val b = (size * 0.42f).toInt()
-            val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
-            c.drawCircle(size - b / 2f, size - b / 2f, b / 2f + 4, ring)
-            badge.setBounds(size - b, size - b, size, size); badge.draw(c)
-            return bmp
+        /** 每次打开 App 时调用：桌面上已有这个图标的话，把图标刷新成当前样子（Claude 换了图标、或老版本的角标图标） */
+        fun refreshPinned(ctx: Context) {
+            runCatching {
+                if (ShortcutManagerCompat.getShortcuts(ctx, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == SHORTCUT_ID }) {
+                    ShortcutManagerCompat.updateShortcuts(ctx, listOf(shortcutInfo(ctx)))
+                }
+            }
         }
+
+        private fun shortcutInfo(ctx: Context): ShortcutInfoCompat =
+            ShortcutInfoCompat.Builder(ctx, SHORTCUT_ID)
+                .setShortLabel("Claude")
+                .setLongLabel("先看网络再打开 Claude")
+                .setIcon(claudeIcon(ctx))
+                .setIntent(Intent(ctx, ClaudeGateActivity::class.java).setAction(Intent.ACTION_VIEW))
+                .build()
+
+        /** Claude App 自己的图标。自适应图标按前景 + 背景两层交给系统，让桌面按自己的形状裁切，和真正的 Claude 图标一样大小 */
+        private fun claudeIcon(ctx: Context): IconCompat = runCatching {
+            val d = ctx.packageManager.getApplicationIcon(CLAUDE_PKG)
+            if (d is AdaptiveIconDrawable) {
+                val size = 432   // 自适应图标是 108dp，四周各留 18dp 给桌面裁切
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val c = Canvas(bmp)
+                d.background?.let { it.setBounds(0, 0, size, size); it.draw(c) }
+                d.foreground?.let { it.setBounds(0, 0, size, size); it.draw(c) }
+                IconCompat.createWithAdaptiveBitmap(bmp)
+            } else {
+                val size = 192
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                d.setBounds(0, 0, size, size); d.draw(Canvas(bmp))
+                IconCompat.createWithBitmap(bmp)
+            }
+        }.getOrElse { IconCompat.createWithResource(ctx, R.mipmap.ic_launcher) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
