@@ -152,7 +152,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun refreshProxies() {
         val api = VpnState.api ?: return
-        runCatching { _proxies.value = api.proxies() }
+        // EasyClash 内部用的组（Claude 联网确认）界面上不显示
+        runCatching {
+            _proxies.value = api.proxies().filterKeys { it != ConfigBuilder.CLAUDE_GATE }
+                .mapValues { (_, p) -> if (ConfigBuilder.CLAUDE_GATE in p.all) p.copy(all = p.all - ConfigBuilder.CLAUDE_GATE) else p }
+        }
     }
 
     // ---------- 连接 ----------

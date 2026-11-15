@@ -57,6 +57,7 @@ import com.easyclash.EasyClashApp
 import com.easyclash.R
 import com.easyclash.data.AppProxyMode
 import com.easyclash.data.ProxyMode
+import com.easyclash.vpn.ClaudeGuard
 import com.easyclash.vpn.Status
 import com.easyclash.vpn.VpnState
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +103,11 @@ class ClaudeGateActivity : ComponentActivity() {
             return if (ok) "已请求添加。如果桌面上没出现，请到系统设置 → 应用 → EasyClash → 权限，允许「创建桌面快捷方式」后再试。"
             else "添加失败：桌面拒绝了请求。请到系统设置 → 应用 → EasyClash → 权限，允许「创建桌面快捷方式」后再试。"
         }
+
+        /** 桌面上有没有「打开 Claude」图标。「Claude 联网前先确认」只在有这个图标时才生效（没有入口就没法放行） */
+        fun isPinned(ctx: Context): Boolean = runCatching {
+            ShortcutManagerCompat.getShortcuts(ctx, ShortcutManagerCompat.FLAG_MATCH_PINNED).any { it.id == SHORTCUT_ID }
+        }.getOrDefault(false)
 
         /** 每次打开 App 时调用：桌面上已有这个图标的话，把图标刷新成当前样子（Claude 换了图标、或老版本的角标图标） */
         fun refreshPinned(ctx: Context) {
@@ -151,6 +157,13 @@ class ClaudeGateActivity : ComponentActivity() {
     }
 
     private fun openClaude() {
+        // 开着「Claude 联网前先确认」：先放行，再打开 Claude
+        val s = EasyClashApp.instance.store.settings.value
+        val api = VpnState.api
+        if (s.claudeConfirm && isPinned(this) && api != null && VpnState.status.value == Status.CONNECTED) {
+            kotlinx.coroutines.runBlocking { ClaudeGuard.allow(api, VpnState.mainGroup, s.claudeAllowMinutes) }
+            ClaudeGuard.cancelNotice(this)
+        }
         val i = packageManager.getLaunchIntentForPackage(CLAUDE_PKG)
         if (i != null) {
             startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -235,6 +248,15 @@ private fun Gate(onCancel: () -> Unit, onOpen: () -> Unit, onConnect: () -> Unit
                         }
                         Spacer(Modifier.height(10.dp))
                         Line("EasyClash", if (status == Status.CONNECTED) "已连接" else "未连接")
+                        val st = EasyClashApp.instance.store.settings.value
+                        if (st.claudeConfirm && status == Status.CONNECTED && ClaudeGateActivity.isPinned(ctx)) {
+                            val allowedNow by ClaudeGuard.allowed.collectAsStateWithLifecycle()
+                            Line(
+                                "Claude 联网",
+                                if (allowedNow) "已放行（${ClaudeGuard.remainingText() ?: ""}）" else "已挡住，点「打开」后放行",
+                                if (allowedNow) Color(0xFF2E7D32) else Color(0xFFE65100),
+                            )
+                        }
                         Line("Claude 线路", i.route, if (i.routeOk) Color(0xFF2E7D32) else Color(0xFFE65100))
                         if (i.exit != null) {
                             Line("出口所在地", i.exit.place)

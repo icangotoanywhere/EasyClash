@@ -205,7 +205,7 @@ fun AdvancedScreen(vm: MainViewModel) {
         KeepAliveSection()
 
         // ================= 通知与快捷开关 =================
-        SectionCard(title = "通知与快捷开关", help = "常驻通知：连接后通知栏（和锁屏）上显示当前节点、最近一次延迟和速度，带「测速」按钮。\n\n打开 Claude 图标：桌面上的「Claude」图标由 EasyClash 创建（桌面一般会自动在角上标出 EasyClash 的小图标）。点开先看网络：EasyClash 有没有连接、Claude 会走哪个节点、出口 IP 在哪；发现没走代理、出口在 Claude 不服务的地区（中国大陆、香港、澳门、俄罗斯等）或 Claude 被「应用」页排除时会提醒。确认后点「打开」拉起 Claude App。查出口 IP 用的是 ipwho.is（失败时用 ip-api.com）。如果点了按钮桌面上没出现图标，请在系统设置里允许 EasyClash「创建桌面快捷方式」。\n\n快捷开关：在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
+        SectionCard(title = "通知与快捷开关", help = "常驻通知：连接后通知栏（和锁屏）上显示当前节点、最近一次延迟和速度，带「测速」按钮。\n\n快捷开关：在手机顶部下拉的快捷设置里放一个 EasyClash 磁贴，点一下连接、再点一下断开，不用打开 App。安卓 13 及以上可一键添加；更老的系统请下拉通知栏 → 点编辑（铅笔图标）→ 把 EasyClash 拖到上面。") {
             SwitchRow(
                 "通知里显示「断开」按钮", "默认不显示，免得误触。断开可以在 App 首页或下拉快捷开关里操作。",
                 settings.notifyStopButton,
@@ -226,14 +226,64 @@ fun AdvancedScreen(vm: MainViewModel) {
             } else {
                 HelpText("本机系统版本较老：下拉通知栏 → 编辑磁贴 → 把 EasyClash 拖上去即可。")
             }
-            HelpText(
-                "在桌面放一个「Claude」图标：点它先显示当前网络（EasyClash 是否连接、Claude 会走哪个节点、出口 IP 和所在地），确认后再打开 Claude App。",
-                Modifier.padding(top = 12.dp, bottom = 4.dp),
-            )
+        }
+
+        // ================= Claude 专用 =================
+        SectionCard(
+            title = "Claude 专用",
+            help = "「打开 Claude」图标：在桌面放一个「Claude」图标，样子就是手机上 Claude App 自己的图标（桌面一般会在角上自动标出 EasyClash 的小图标，和原版区分开）。" +
+                "点它先弹出一张卡片看网络：EasyClash 有没有连接、Claude 会走哪个节点、出口 IP 和所在地；发现没走代理、出口在 Claude 不服务的地区（中国大陆、香港、澳门、俄罗斯等）、" +
+                "或 Claude 被「应用」页排除时会提醒。确认后点「打开」拉起 Claude App。查出口 IP 用的是 ipwho.is（失败时用 ip-api.com）。" +
+                "Claude 升级换了图标，这个图标会自动跟着换（EasyClash 连着时随时跟上，否则下次打开 EasyClash 时跟上）。" +
+                "如果点了按钮桌面上没出现图标，请在系统设置 → 应用 → EasyClash → 权限里允许「创建桌面快捷方式」。\n\n" +
+                "有了这个图标，原版 Claude 图标可以从桌面拿掉：推荐把桌面改成「抽屉」布局后长按 Claude 图标选「移除」（不是卸载），或者拖进一个文件夹。" +
+                "不建议用系统的「隐藏应用」（荣耀、华为会把它的通知一起藏掉），也不要把 Claude 放进隐私空间或应用分身（那里不经过 EasyClash）。",
+        ) {
+            HelpText("在桌面放一个「Claude」图标：点它先看网络，确认后再打开 Claude。", Modifier.padding(bottom = 4.dp))
             OutlinedButton(onClick = {
                 android.widget.Toast.makeText(ctx, com.easyclash.ui.ClaudeGateActivity.pinShortcut(ctx), android.widget.Toast.LENGTH_LONG).show()
             }) { Text("在桌面创建「打开 Claude」图标") }
             if (!com.easyclash.ui.ClaudeGateActivity.claudeInstalled(ctx)) HelpText("这台手机还没装 Claude App；也可以先创建，点开后会跳到应用商店。")
+
+            Spacer(Modifier.height(12.dp))
+            // 只有桌面上有「打开 Claude」图标时才生效（没有入口就没法放行）；每次显示本页时重新判断
+            val pinned = remember(settings) { com.easyclash.ui.ClaudeGateActivity.isPinned(ctx) }
+            SwitchRow(
+                "Claude 联网前先确认",
+                "平时挡住 Claude 的网络连接，在「打开 Claude」卡片上看过网络、点了「打开」才放行。默认关。" +
+                    (if (pinned) "" else "\n要先用上面的按钮在桌面创建「打开 Claude」图标，这一项才会生效。"),
+                settings.claudeConfirm,
+                detail = "作用：防止网络不对（没走代理、出口在 Claude 不服务的地区）时 Claude 就自己联网了。\n\n" +
+                    "前提：桌面上要有上面创建的「打开 Claude」图标——它是放行的入口。没有这个图标时，这一项开着也不起作用，EasyClash 不看管 Claude；" +
+                    "图标被删掉后，最多 20 秒内自动停止看管，Claude 照常联网。\n\n开启后：\n\n" +
+                    "• 平时 Claude 的网站（claude.ai、claude.com、anthropic.com、claudeusercontent.com）一律连不上，Claude App 会显示网络错误，这是正常的；\n" +
+                    "• 从桌面的「打开 Claude」图标进去，看过网络卡片后点「打开」，才放行；\n" +
+                    "• 放行多久在下面选：直到锁屏（默认）、30 分钟或 2 小时。到时间后重新挡住，已经连上的 Claude 连接也会断开，Claude 里会提示网络错误，再从图标进一次就行；\n" +
+                    "• 直接点了原版 Claude 图标也没关系：Claude 一联网被挡住，通知栏会弹一条「Claude 想联网，已被挡住」，点它就能打开检查卡片放行（每分钟最多提醒一次；需要「日志级别」是 info 或 debug，默认就是 info）。\n\n" +
+                    "说明：\n" +
+                    "• 是按网站挡的，不分 App：手机浏览器里打开 claude.ai 也会被挡，同样从图标放行即可；\n" +
+                    "• 只在规则模式下起作用；全局模式、直连模式不挡；\n" +
+                    "• 如果你同时在用 To Claude 小工具，它的「Claude 服务器」一项在挡住期间会显示连不上，放行后就正常了；\n" +
+                    "• 改动后会自动重载配置（已连接时）。",
+            ) { v -> vm.updateSettings { it.claudeConfirm = v } }
+            if (settings.claudeConfirm) {
+                HelpText("点「打开」后放行多久：", Modifier.padding(top = 6.dp, bottom = 2.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "直到锁屏", 30 to "30 分钟", 120 to "2 小时").forEach { (m, label) ->
+                        FilterChip(
+                            selected = settings.claudeAllowMinutes == m,
+                            onClick = { vm.updateSettings(reload = false) { it.claudeAllowMinutes = m } },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                val allowedNow by com.easyclash.vpn.ClaudeGuard.allowed.collectAsStateWithLifecycle()
+                if (!pinned) HelpText("现在：没有「打开 Claude」图标，不看管 Claude。", Modifier.padding(top = 4.dp))
+                else if (status == Status.CONNECTED) HelpText(
+                    if (allowedNow) "现在：已放行（${com.easyclash.vpn.ClaudeGuard.remainingText() ?: ""}）" else "现在：已挡住",
+                    Modifier.padding(top = 4.dp),
+                )
+            }
         }
 
         // ================= 诊断 =================

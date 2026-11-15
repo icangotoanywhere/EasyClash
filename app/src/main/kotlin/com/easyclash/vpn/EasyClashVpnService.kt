@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
@@ -124,7 +125,7 @@ class EasyClashVpnService : VpnService() {
             // 2. 生成最终配置
             secret = randomSecret()
             val out = File(store.runDir, "config.yaml")
-            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret)
+            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret, claudeGuardOn())
             VpnState.appendLog("[APP] TUN fd=${pfd.fd} stack=${settings.tunStack.coreValue} mode=${settings.appProxyMode} 主组=${result.mainGroup} 地区组=${result.regionGroups.size}")
 
             // 3. 启动内核
@@ -145,7 +146,11 @@ class EasyClashVpnService : VpnService() {
             if (!ok) throw IllegalStateException("内核已启动但控制接口无响应")
             // 从一开始就收集内核日志（含 TUN 启动失败等只在启动时出现的错误）
             logWs?.cancel()
-            logWs = api.logSocket(settings.logLevel) { type, payload -> VpnState.appendLog("[${type.uppercase()}] $payload") }
+            logWs = api.logSocket(settings.logLevel) { type, payload ->
+                VpnState.appendLog("[${type.uppercase()}] $payload")
+                // Claude 联网前先确认：Claude 的连接被挡住时发通知，点它去检查并放行
+                if (payload.contains(ConfigBuilder.CLAUDE_GATE)) ClaudeGuard.onLogLine(this@EasyClashVpnService, payload)
+            }
             VpnState.appendLog("[APP] 内核控制接口已就绪，版本 ${api.version()}")
             // 把内核实际生效的 tun / dns 配置记下来：TUN 启动失败时内核会把 tun.enable 改成 false
             runCatching {
@@ -155,6 +160,7 @@ class EasyClashVpnService : VpnService() {
 
             VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
+            applyClaudeGuard(api, result.mainGroup)
             VpnState.setStatus(Status.CONNECTED)
             if (Build.VERSION.SDK_INT >= 29) VpnState.setAlwaysOn(isAlwaysOn, isLockdownEnabled)
             if (!KeepAlive.ignoringBatteryOptimizations(this@EasyClashVpnService)) {
@@ -188,6 +194,74 @@ class EasyClashVpnService : VpnService() {
         }
         val region = VpnState.regionGroups.firstOrNull { it.code == code } ?: return
         runCatching { RegionLock.apply(api, store, mainGroup, region) }
+    }
+
+    // ---------------- Claude 联网前先确认（见 ClaudeGuard） ----------------
+    private var claudeJob: Job? = null
+    private var screenOffReceiver: BroadcastReceiver? = null
+
+    /** 设置里开了「Claude 联网前先确认」，并且桌面上有「打开 Claude」图标（没有入口就没法放行，不看管 Claude） */
+    private fun claudeGuardOn(): Boolean =
+        EasyClashApp.instance.store.settings.value.claudeConfirm && com.easyclash.ui.ClaudeGateActivity.isPinned(this)
+
+    private suspend fun applyClaudeGuard(api: CoreApi, mainGroup: String) {
+        claudeJob?.cancel(); claudeJob = null
+        screenOffReceiver?.let { runCatching { unregisterReceiver(it) } }; screenOffReceiver = null
+        val st = EasyClashApp.instance.store.settings.value
+        if (!st.claudeConfirm) { ClaudeGuard.reset(); return }
+        if (!claudeGuardOn()) {
+            // 开了但桌面上还没有「打开 Claude」图标：不看管 Claude；等用户创建了图标，自动重载配置，开始生效
+            ClaudeGuard.reset()
+            claudeJob = bgScope.launch {
+                while (isActive) {
+                    delay(20_000)
+                    if (com.easyclash.ui.ClaudeGateActivity.isPinned(this@EasyClashVpnService)) {
+                        VpnState.appendLog("[APP] 已创建「打开 Claude」图标，Claude 联网确认开始生效")
+                        scope.launch { reloadConfig() }
+                        break
+                    }
+                }
+            }
+            return
+        }
+        ClaudeGuard.apply(api, mainGroup)
+        claudeJob = bgScope.launch {
+            while (isActive) {
+                delay(20_000)
+                // 桌面上的「打开 Claude」图标被删掉了：放行并不再看管（下次连接 / 重载时规则也会去掉）
+                if (!com.easyclash.ui.ClaudeGateActivity.isPinned(this@EasyClashVpnService)) {
+                    ClaudeGuard.allow(api, mainGroup, 0)
+                    VpnState.appendLog("[APP] 桌面上的「打开 Claude」图标没了，Claude 联网确认暂停，不再挡住 Claude")
+                    ClaudeGuard.reset()
+                    break
+                }
+                // 放行到时就重新挡住
+                if (ClaudeGuard.allowed.value && ClaudeGuard.expired()) ClaudeGuard.lock(api, "放行时间到了")
+            }
+        }
+        // 「直到锁屏」：屏幕一关就重新挡住
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: Intent?) {
+                if (ClaudeGuard.untilScreenOff()) bgScope.launch { ClaudeGuard.lock(api, "锁屏了") }
+            }
+        }
+        registerReceiver(r, IntentFilter(Intent.ACTION_SCREEN_OFF))
+        screenOffReceiver = r
+    }
+
+    // Claude 升级换了图标时，桌面上的「打开 Claude」图标跟着换（服务在运行时才收得到；打开 App 时也会刷新一次）
+    private val claudeUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (i?.data?.schemeSpecificPart == com.easyclash.ui.ClaudeGateActivity.CLAUDE_PKG) {
+                com.easyclash.ui.ClaudeGateActivity.refreshPinned(this@EasyClashVpnService)
+            }
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        val f = IntentFilter().apply { addAction(Intent.ACTION_PACKAGE_ADDED); addAction(Intent.ACTION_PACKAGE_REPLACED); addDataScheme("package") }
+        runCatching { registerReceiver(claudeUpdateReceiver, f) }
     }
 
     private fun buildTun(mode: AppProxyMode, apps: Set<String>, ipv6: Boolean): ParcelFileDescriptor? {
@@ -243,10 +317,11 @@ class EasyClashVpnService : VpnService() {
             val yamlText = app.repo.rawYaml(sub) ?: return
             val pfd = tun ?: return
             val out = File(store.runDir, "config.yaml")
-            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret)
+            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret, claudeGuardOn())
             withContext(Dispatchers.IO) { core.Core.reload(out.absolutePath) }
             VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
+            applyClaudeGuard(api, result.mainGroup)
             updateNotification("已连接 · ${sub.name}")
             startNodeMonitor(api)
             startMaintenance(api, checkGeo = false)
@@ -294,6 +369,9 @@ class EasyClashVpnService : VpnService() {
         VpnState.setStatus(Status.STOPPING)
         maintJob?.cancel(); maintJob = null
         nodeJob?.cancel(); nodeJob = null
+        claudeJob?.cancel(); claudeJob = null
+        screenOffReceiver?.let { runCatching { unregisterReceiver(it) } }; screenOffReceiver = null
+        ClaudeGuard.reset()
         nodeTitle = null; nodeDelay = ""; leafName = null; trafficText = ""; testing = false
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null
@@ -316,6 +394,7 @@ class EasyClashVpnService : VpnService() {
     override fun onDestroy() {
         // 必须同步清理，否则系统销毁服务时内核会残留运行、TUN 泄漏
         if (VpnState.status.value != Status.IDLE) runBlocking { stopEverything("服务被系统销毁") }
+        runCatching { unregisterReceiver(claudeUpdateReceiver) }
         scope.cancel()
         bgScope.cancel()
         super.onDestroy()

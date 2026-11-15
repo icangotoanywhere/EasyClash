@@ -21,6 +21,10 @@ import java.io.File
 object ConfigBuilder {
 
     const val REGION_SELECTOR = "🌍 地区选择"
+    /** 「Claude 联网前先确认」用的选择组（REJECT / 主组），界面上不显示，见 vpn/ClaudeGuard */
+    const val CLAUDE_GATE = "EasyClash·Claude 放行"
+    /** Claude App 用到的域名（含子域名） */
+    val CLAUDE_DOMAINS = listOf("claude.ai", "claude.com", "anthropic.com", "claudeusercontent.com", "clau.de")
     const val TUN_ADDR4 = "172.19.0.1"
     const val TUN_DNS4 = "172.19.0.2"
     const val TUN_ADDR6 = "fdfe:dcba:9876::1"
@@ -100,6 +104,8 @@ object ConfigBuilder {
         tunFd: Int,
         controllerPort: Int,
         secret: String,
+        /** Claude 联网前先确认是否生效：设置里开了、并且桌面上有「打开 Claude」图标（由服务判断后传进来） */
+        claudeGuard: Boolean = false,
     ): BuildResult {
         val cfg = load(subscriptionYaml)
 
@@ -201,6 +207,11 @@ object ConfigBuilder {
         val front = mutableListOf<String>()
         if (settings.blockQuic) front += "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT"
         settings.extraRules.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { front += it }
+        // Claude 联网前先确认：Claude 的域名指向放行组（平时选 REJECT），排在国际 AI 服务规则前面
+        if (claudeGuard) {
+            groups += linkedMapOf<String, Any?>("name" to CLAUDE_GATE, "type" to "select", "proxies" to listOf("REJECT", mainGroup))
+            CLAUDE_DOMAINS.forEach { front += "DOMAIN-SUFFIX,$it,$CLAUDE_GATE" }
+        }
         aiDomains.forEach { front += "DOMAIN-SUFFIX,$it,$mainGroup" }
         if (settings.bingDirect) front += microsoftDirectRule()
         // 地理数据库的更新下载也固定走代理（理由同上）

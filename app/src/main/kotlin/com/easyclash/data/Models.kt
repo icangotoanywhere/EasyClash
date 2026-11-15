@@ -68,6 +68,10 @@ data class Settings(
     var appList: MutableSet<String> = mutableSetOf(),
     /** 国际 AI 服务（ChatGPT、Claude、Gemini……）的域名一律走代理、绝不直连 */
     var aiForceProxy: Boolean = true,
+    /** Claude 联网前先确认：平时挡住 Claude 的连接，在「打开 Claude」检查卡片上点「打开」后才放行（仅安卓，见 ClaudeGuard） */
+    var claudeConfirm: Boolean = false,
+    /** 放行多久：0 = 直到锁屏；否则分钟数（30、120） */
+    var claudeAllowMinutes: Int = 0,
     var lockedRegion: String? = null,           // 锁定的地区代码，如 "SG"，null 表示不锁定
     var ipv6: Boolean = false,
     var blockQuic: Boolean = true,
@@ -98,6 +102,7 @@ data class Settings(
         put("mode", mode.name); put("appProxyMode", appProxyMode.name)
         put("appList", JSONArray(appList.toList()))
         put("aiForceProxy", aiForceProxy)
+        put("claudeConfirm", claudeConfirm); put("claudeAllowMinutes", claudeAllowMinutes)
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
         put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton); put("keepAliveAsked", keepAliveAsked); put("lastUpdateCheck", lastUpdateCheck)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect); put("directFallback", directFallback)
@@ -132,6 +137,8 @@ data class Settings(
                 }
             }
             s.aiForceProxy = o.optBoolean("aiForceProxy", true)
+            s.claudeConfirm = o.optBoolean("claudeConfirm", false)
+            s.claudeAllowMinutes = o.optInt("claudeAllowMinutes", 0)
             s.lockedRegion = if (o.isNull("lockedRegion")) null else o.optString("lockedRegion")
             s.ipv6 = o.optBoolean("ipv6", false)
             s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)
