@@ -282,7 +282,7 @@ private suspend fun loadInfo(ctx: Context, status: Status): GateInfo = withConte
         if (start == null) {
             route = "直连模式，且关了「国际 AI 服务强制走代理」：会用你的真实 IP"
         } else {
-            var name = start
+            var name: String = start
             var leaf: com.easyclash.data.ProxyItem? = null
             for (hop in 1..8) {
                 val p = runCatching { api.proxy(name) }.getOrNull() ?: break
