@@ -494,7 +494,9 @@ class EasyClashVpnService : VpnService() {
     private fun pushNotification() {
         if (VpnState.status.value != Status.CONNECTED) return   // 断开过程中迟到的回调不能把通知又挂回去
         val title = nodeTitle ?: return
-        val body = listOf(if (testing) "测速中…" else nodeDelay, trafficText).filter { it.isNotBlank() }.joinToString("   ")
+        // 延迟前面带一个和图标同色的圆点（🟢 ≤150 ms，🟡 ≤300 ms，🔴 更慢或超时，⚪ 未测），图标不显示时也能看出好坏
+        val delayText = if (testing) "测速中…" else if (nodeDelay.isBlank()) "" else "${delayDot(nodeDelayMs)} $nodeDelay"
+        val body = listOf(delayText, trafficText).filter { it.isNotBlank() }.joinToString("   ")
         runCatching { getSystemService(NotificationManager::class.java).notify(NOTIFY_ID, buildNotification(body, title, withTest = true)) }
     }
 
@@ -533,6 +535,15 @@ class EasyClashVpnService : VpnService() {
             b.addAction(Notification.Action.Builder(null, "断开", stop).build())
         }
         return b.build()
+    }
+
+    /** 通知正文里延迟前的圆点，分档和 [delayIcon] 一致 */
+    private fun delayDot(ms: Int): String = when {
+        ms == DELAY_TIMEOUT -> "🔴"
+        ms <= 0 -> "⚪"
+        ms <= 150 -> "🟢"
+        ms <= 300 -> "🟡"
+        else -> "🔴"
     }
 
     /** 去掉名称里的国旗 emoji（两个区域指示符组成一个旗帜），顺手去掉它后面的空格 */
