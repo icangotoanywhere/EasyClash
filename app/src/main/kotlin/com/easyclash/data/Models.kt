@@ -83,6 +83,10 @@ data class Settings(
     var testIntervalMin: Int = 5,
     /** 常驻通知里是否显示「断开」按钮。默认不显示，免得误触 */
     var notifyStopButton: Boolean = false,
+    /** 状态栏小图标轮换显示 EasyClash 图标 / 出口国家 / 延迟，通知卡片按延迟上色 */
+    var statusIconCycle: Boolean = true,
+    /** 轮换间隔（秒）：1、2、3 */
+    var statusIconSeconds: Int = 2,
     /** 首次连接成功后是否已经提醒过「允许后台运行」（只提醒一次） */
     var keepAliveAsked: Boolean = false,
     /** 上次自动检查更新的时间（毫秒），12 小时内不重复检查 */
@@ -99,7 +103,7 @@ data class Settings(
         put("appList", JSONArray(appList.toList()))
         put("aiForceProxy", aiForceProxy)
         put("lockedRegion", lockedRegion ?: JSONObject.NULL)
-        put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton); put("keepAliveAsked", keepAliveAsked); put("lastUpdateCheck", lastUpdateCheck)
+        put("testIntervalMin", testIntervalMin); put("notifyStopButton", notifyStopButton); put("statusIconCycle", statusIconCycle); put("statusIconSeconds", statusIconSeconds); put("keepAliveAsked", keepAliveAsked); put("lastUpdateCheck", lastUpdateCheck)
         put("ipv6", ipv6); put("blockQuic", blockQuic); put("bingDirect", bingDirect); put("directFallback", directFallback)
         put("useSubscriptionDns", useSubscriptionDns)
         put("tunStack", tunStack.name); put("logLevel", logLevel)
@@ -136,6 +140,8 @@ data class Settings(
             s.ipv6 = o.optBoolean("ipv6", false)
             s.testIntervalMin = o.optInt("testIntervalMin", 5).coerceIn(1, 1440)
             s.notifyStopButton = o.optBoolean("notifyStopButton", false)
+            s.statusIconCycle = o.optBoolean("statusIconCycle", true)
+            s.statusIconSeconds = o.optInt("statusIconSeconds", 2).coerceIn(1, 3)
             s.keepAliveAsked = o.optBoolean("keepAliveAsked", false)
             s.lastUpdateCheck = o.optLong("lastUpdateCheck", 0)
             s.blockQuic = o.optBoolean("blockQuic", true)
