@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.easyclash.EasyClashApp
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.RegionLock
-import com.easyclash.core.RegionVerify
 import com.easyclash.core.Regions
 import com.easyclash.data.AppInfo
 import com.easyclash.data.ConnectionItem
@@ -153,11 +152,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun refreshProxies() {
         val api = VpnState.api ?: return
-        // 「核实出口」组是 EasyClash 内部用的，界面上不显示
-        runCatching {
-            _proxies.value = api.proxies().filterKeys { it != RegionVerify.GROUP }
-                .mapValues { (_, p) -> if (RegionVerify.GROUP in p.all) p.copy(all = p.all - RegionVerify.GROUP) else p }
-        }
+        runCatching { _proxies.value = api.proxies() }
     }
 
     // ---------- 连接 ----------
@@ -215,10 +210,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _busy.value = true
         val before = resolveLeafName(region.groupName)
         runCatching { api.groupDelay(region.groupName) }
-        // 锁定的就是这个地区时：按新测的延迟重新核实出口再切（节点要真的在这个地区）
-        if (settings.value.lockedRegion == code && settings.value.mode != ProxyMode.DIRECT) {
-            runCatching { RegionVerify.ensure(api, region, EasyClashVpnService.VERIFY_PORT, { VpnState.appendLog(it) }, force = true) }
-        }
         refreshProxies()
         // 内核对自动组的"最快"结果有几秒缓存，稍等再刷一次拿到最终选择
         delay(1500)
@@ -253,18 +244,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         store.update { it.lockedRegion = code }
         // 未连接时只记下设置：解除锁定的恢复留到下次连接时做（见 EasyClashVpnService.applyRegionLock）
         val api = VpnState.api ?: return@launch
-        var locked: com.easyclash.core.Region? = null
         if (code == null) {
             runCatching { RegionLock.release(api, store, mainGroup) }
         } else {
             val region = Regions.of(code) ?: return@launch
             if (regionGroups.none { it.code == code }) { say("当前订阅里没有${region.displayName}的节点"); return@launch }
             runCatching { RegionLock.apply(api, store, mainGroup, region) }.onFailure { say("切换失败：${it.message}") }
-            locked = regionGroups.firstOrNull { it.code == code }
         }
         refreshProxies()
-        // 核实锁定地区节点的实际出口后再钉住；解除锁定就取消钉住（几秒到几十秒，结果写进日志）
-        runCatching { RegionVerify.onLockChanged(api, regionGroups, locked, EasyClashVpnService.VERIFY_PORT) { VpnState.appendLog(it) } }
     }
 
     // ---------- 订阅 ----------

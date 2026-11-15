@@ -81,7 +81,7 @@ class CoreApi(private val port: Int, private val secret: String) {
         call(req("/proxies/${enc(group)}").put(body))
     }
 
-    /** 取消自动测速组的固定选择（锁定地区时 RegionVerify 钉住的节点），内核恢复按延迟自动选 */
+    /** 取消自动测速组的固定选择（v1.0.38 核实出口时钉住的节点，见 applyRegionLock），内核恢复按延迟自动选 */
     suspend fun unfix(group: String) {
         call(req("/proxies/${enc(group)}").delete())
     }

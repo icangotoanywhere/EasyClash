@@ -235,7 +235,7 @@ func provIPInfo(c *http.Client) (NetInfo, error) {
 
 func runCheck(useSys bool, custom string) CheckResult {
 	c, via := makeClient(useSys, custom)
-	provs := []func(*http.Client) (NetInfo, error){provIPAPI, provIPWho, provIPInfo}
+	provs := []func(*http.Client) (NetInfo, error){provIPWho, provIPAPI, provIPInfo}
 	var lastErr error
 	for i, p := range provs {
 		t0 := time.Now()

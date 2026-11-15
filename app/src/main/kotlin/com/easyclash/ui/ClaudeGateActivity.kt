@@ -356,7 +356,11 @@ private suspend fun loadInfo(ctx: Context, status: Status): GateInfo = withConte
 
 private val UNSUPPORTED = setOf("CN", "HK", "MO", "RU", "BY", "IR", "KP", "SY", "CU")
 
-/** 查出口 IP：先 ip-api.com，失败再 ipwho.is（和 NetGateShow 一样） */
+/**
+ * 查出口 IP：先 ipwho.is，失败再 ip-api.com（电脑版悬浮球同样的顺序）。
+ * 2026-11 实测：标「日本」的节点，ip-api.com 按 IP 的登记信息报成香港，而经该节点到东京的延迟明显低于到香港，
+ * 实际在日本；ipwho.is 报的是东京，和实测一致，所以把它放在前面。
+ */
 private fun queryExit(port: Int?): ExitInfo {
     val b = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS)
     if (port != null) b.proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", port)))
@@ -366,14 +370,7 @@ private fun queryExit(port: Int?): ExitInfo {
         JSONObject(it.body?.string() ?: "{}")
     }
     fun join(vararg p: String) = p.filter { it.isNotBlank() }.distinct().joinToString(" · ")
-    return runCatching {
-        val o = get("http://ip-api.com/json/?lang=zh-CN&fields=status,message,country,countryCode,regionName,city,isp,org,as,query")
-        if (o.optString("status") != "success") throw IllegalStateException(o.optString("message"))
-        ExitInfo(
-            o.optString("query"), join(o.optString("country"), o.optString("regionName"), o.optString("city")),
-            o.optString("countryCode"), join(o.optString("isp").ifBlank { o.optString("org") }, o.optString("as").substringBefore(' ')),
-        )
-    }.getOrElse {
+    val ipwho = {
         val o = get("https://ipwho.is/?lang=zh-CN")
         if (!o.optBoolean("success")) throw IllegalStateException(o.optString("message"))
         val conn = o.optJSONObject("connection")
@@ -382,4 +379,13 @@ private fun queryExit(port: Int?): ExitInfo {
             o.optString("country_code"), join(conn?.optString("isp").orEmpty(), conn?.optInt("asn")?.takeIf { it > 0 }?.let { "AS$it" }.orEmpty()),
         )
     }
+    val ipApi = {
+        val o = get("http://ip-api.com/json/?lang=zh-CN&fields=status,message,country,countryCode,regionName,city,isp,org,as,query")
+        if (o.optString("status") != "success") throw IllegalStateException(o.optString("message"))
+        ExitInfo(
+            o.optString("query"), join(o.optString("country"), o.optString("regionName"), o.optString("city")),
+            o.optString("countryCode"), join(o.optString("isp").ifBlank { o.optString("org") }, o.optString("as").substringBefore(' ')),
+        )
+    }
+    return runCatching { ipwho() }.getOrElse { ipApi() }
 }

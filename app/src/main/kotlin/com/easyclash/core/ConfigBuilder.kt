@@ -100,7 +100,6 @@ object ConfigBuilder {
         tunFd: Int,
         controllerPort: Int,
         secret: String,
-        verifyPort: Int = 0,
     ): BuildResult {
         val cfg = load(subscriptionYaml)
 
@@ -171,17 +170,6 @@ object ConfigBuilder {
             }
         }
 
-        // 锁定地区时核实节点实际出口用（见 RegionVerify）：一个包含全部节点的选择组 + 只给本机用的入口，出站固定为这个组。
-        // 加在上面「每个手动组末尾加地区选择」之后，所以这个组里没有「🌍 地区选择」，锁定地区时也不会被切走。
-        var verifyListener: Map<String, Any?>? = null
-        if (createdRegions.isNotEmpty() && verifyPort > 0 && RegionVerify.GROUP !in existingGroupNames) {
-            groups += linkedMapOf<String, Any?>("name" to RegionVerify.GROUP, "type" to "select", "include-all" to true)
-            verifyListener = linkedMapOf(
-                "name" to RegionVerify.LISTENER, "type" to "mixed", "port" to verifyPort,
-                "listen" to "127.0.0.1", "udp" to false, "proxy" to RegionVerify.GROUP,
-            )
-        }
-
         // ---------- 在线规则集 / 地理数据库的下载线路 ----------
         // 订阅引用的在线规则集（Netflix、广告拦截、国内网站列表等）和地理数据库大多放在国外网站上，国内直连下不了。
         // 内核默认按规则去下载，而很多订阅的兜底组默认指向"直连"，结果规则集全部下载失败、等于没有。
@@ -232,9 +220,6 @@ object ConfigBuilder {
             "external-controller-cors", "ebpf", "iptables").forEach { cfg.remove(it) }
 
         if (settings.mixedPort > 0) cfg["mixed-port"] = settings.mixedPort
-        // 订阅自带的入口（listeners）去掉：手机上用不到，还可能和别的软件抢端口；只留核实出口用的那个
-        cfg.remove("listeners")
-        verifyListener?.let { cfg["listeners"] = listOf(it) }
         cfg["allow-lan"] = false
         cfg["mode"] = settings.mode.coreValue
         cfg["log-level"] = settings.logLevel

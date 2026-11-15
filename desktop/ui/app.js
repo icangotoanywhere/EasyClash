@@ -193,14 +193,11 @@ function resolveLeaf(start) {
   }
   return cur;
 }
-// 「核实出口」组是 EasyClash 内部用的（锁定地区时核实节点实际出口，见 regionverify.go），界面上不显示
-const VERIFY_GROUP = 'EasyClash·核实出口';
 function parseProxies(raw) {
   const out = {};
   for (const [name, o] of Object.entries(raw.proxies || {})) {
-    if (name === VERIFY_GROUP) continue;
     const hist = o.history || [];
-    out[name] = { name, type: o.type || '', now: o.now || '', all: (o.all || []).filter((x) => x !== VERIFY_GROUP), delay: hist.length ? hist[hist.length - 1].delay : 0 };
+    out[name] = { name, type: o.type || '', now: o.now || '', all: o.all || [], delay: hist.length ? hist[hist.length - 1].delay : 0 };
   }
   return out;
 }
@@ -885,7 +882,7 @@ function pageAdvanced() {
       '小球定时检测这台电脑的出口 IP、所在地和延迟：绿色连接良好，黄色延迟较高，红色连不上。\n\n' +
       '· 拖动可以移到任意位置；双击展开详情面板，显示位置、IP、运营商，以及 EasyClash 当前的线路（正在用的节点和延迟）。当前不是走 EasyClash 时显示「未使用代理」或「其他代理软件」。\n' +
       '· 右键菜单：立即刷新、刷新间隔、不透明度、复制出口信息、隐藏悬浮球。\n\n' +
-      '检测出口用的是 ip-api.com 等公开查询接口，每次只发一个很小的请求。原来单独运行的 NetGateShow 可以关掉了。',
+      '检测出口用的是 ipwho.is 等公开查询接口（查不到再用 ip-api.com），每次只发一个很小的请求。原来单独运行的 NetGateShow 可以关掉了。',
       (v) => setSetting({ floatBall: v })) : null,
     h('div', { class: 'mt8' }, btn('设为 clash:// 一键导入的打开方式', () => act('claim-protocol', {}), 'outlined')),
     helpText('机场网页上的「一键导入 Clash」按钮会打开 clash:// 链接。点了没反应或打开的是别的软件时，点这个按钮让它交给本软件。', 'mt4')));

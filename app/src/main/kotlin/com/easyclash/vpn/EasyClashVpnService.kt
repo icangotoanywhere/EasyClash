@@ -16,7 +16,6 @@ import com.easyclash.R
 import com.easyclash.core.ConfigBuilder
 import com.easyclash.core.CoreApi
 import com.easyclash.core.RegionLock
-import com.easyclash.core.RegionVerify
 import com.easyclash.data.AppProxyMode
 import com.easyclash.data.ProxyMode
 import com.easyclash.ui.MainActivity
@@ -49,8 +48,6 @@ class EasyClashVpnService : VpnService() {
         private const val OLD_CHANNEL = "easyclash_vpn"
         private const val NOTIFY_ID = 1
         const val CONTROLLER_PORT = 16090
-        /** 锁定地区时核实节点出口用的本机入口（见 RegionVerify） */
-        const val VERIFY_PORT = 16091
         private const val GEO_CHECK_INTERVAL = 7L * 24 * 3600 * 1000   // 地理数据库每 7 天检查一次
         private const val GEO_RETRY_INTERVAL = 12L * 3600 * 1000       // 失败后 12 小时内不再自动重试
 
@@ -72,8 +69,6 @@ class EasyClashVpnService : VpnService() {
     // 连接后的后台维护（补下载规则集、更新地理数据库）。耗时较长，不能放进上面的单线程 scope，否则会挡住断开/重载
     private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var maintJob: Job? = null
-    // 锁定地区时每 30 秒核实一次当前节点的实际出口（见 RegionVerify）
-    private var guardJob: Job? = null
 
     // 通知栏显示的内容：当前节点、最近一次延迟、实时速度。节点信息每 10 秒从内核刷新一次
     private var nodeJob: Job? = null
@@ -129,7 +124,7 @@ class EasyClashVpnService : VpnService() {
             // 2. 生成最终配置
             secret = randomSecret()
             val out = File(store.runDir, "config.yaml")
-            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret, VERIFY_PORT)
+            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret)
             VpnState.appendLog("[APP] TUN fd=${pfd.fd} stack=${settings.tunStack.coreValue} mode=${settings.appProxyMode} 主组=${result.mainGroup} 地区组=${result.regionGroups.size}")
 
             // 3. 启动内核
@@ -183,32 +178,16 @@ class EasyClashVpnService : VpnService() {
     private suspend fun applyRegionLock(api: CoreApi, mainGroup: String) {
         val store = EasyClashApp.instance.store
         val s = store.settings.value
+        // v1.0.38 曾把锁定地区的自动组「钉住」在核实过出口的节点上，内核会把钉住记录带到以后的连接。
+        // 那个功能已去掉（查询服务的地区数据本身不可靠），这里取消所有地区组的钉住，恢复按延迟自动选
+        for (r in VpnState.regionGroups) runCatching { api.unfix(r.groupName) }
         val code = s.lockedRegion
-        val region = code?.let { c -> VpnState.regionGroups.firstOrNull { it.code == c } }
         if (code == null) {
             if (s.regionSaved.isNotEmpty()) runCatching { RegionLock.release(api, store, mainGroup) }
-        } else if (region != null) {
-            runCatching { RegionLock.apply(api, store, mainGroup, region) }
+            return
         }
-        // 核实锁定地区的节点出口（后台进行，不挡住连接），并启动每 30 秒的检查
-        bgScope.launch {
-            RegionVerify.onLockChanged(api, VpnState.regionGroups, region, VERIFY_PORT) { VpnState.appendLog(it) }
-        }
-        startRegionGuard(api)
-    }
-
-    /** 锁定地区时每 30 秒检查一次：当前用的不是核实过的节点（被内核临时换走、或有更快的），就重新核实 */
-    private fun startRegionGuard(api: CoreApi) {
-        guardJob?.cancel()
-        guardJob = bgScope.launch {
-            while (true) {
-                delay(30_000)
-                val s = EasyClashApp.instance.store.settings.value
-                if (s.mode == ProxyMode.DIRECT) continue
-                val region = s.lockedRegion?.let { c -> VpnState.regionGroups.firstOrNull { it.code == c } } ?: continue
-                runCatching { RegionVerify.ensure(api, region, VERIFY_PORT, { VpnState.appendLog(it) }) }
-            }
-        }
+        val region = VpnState.regionGroups.firstOrNull { it.code == code } ?: return
+        runCatching { RegionLock.apply(api, store, mainGroup, region) }
     }
 
     private fun buildTun(mode: AppProxyMode, apps: Set<String>, ipv6: Boolean): ParcelFileDescriptor? {
@@ -264,7 +243,7 @@ class EasyClashVpnService : VpnService() {
             val yamlText = app.repo.rawYaml(sub) ?: return
             val pfd = tun ?: return
             val out = File(store.runDir, "config.yaml")
-            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret, VERIFY_PORT)
+            val result = ConfigBuilder.build(yamlText, settings, out, pfd.fd, CONTROLLER_PORT, secret)
             withContext(Dispatchers.IO) { core.Core.reload(out.absolutePath) }
             VpnState.setRuntime(api, result.mainGroup, result.regionGroups, out.absolutePath)
             applyRegionLock(api, result.mainGroup)
@@ -315,8 +294,6 @@ class EasyClashVpnService : VpnService() {
         VpnState.setStatus(Status.STOPPING)
         maintJob?.cancel(); maintJob = null
         nodeJob?.cancel(); nodeJob = null
-        guardJob?.cancel(); guardJob = null
-        RegionVerify.reset()
         nodeTitle = null; nodeDelay = ""; leafName = null; trafficText = ""; testing = false
         trafficWs?.cancel(); trafficWs = null
         logWs?.cancel(); logWs = null

@@ -321,7 +321,6 @@ func (a *App) doConnect() error {
 		return errors.New("系统代理模式需要本机代理端口，请到「高级」页填一个端口（默认 17890）")
 	}
 	ctl := "127.0.0.1:" + strconv.Itoa(freePort())
-	verifyListenPort = freePort() // 锁定地区时核实节点出口用的本机入口（重载沿用）
 	secret := randomSecret()
 	res, err := buildConfig(yamlText, st, a.store.RunDir(), ctl, secret, tun)
 	if err != nil {
@@ -519,28 +518,30 @@ func (a *App) lockRelease(api *CoreAPI, mainGroup, skip string) {
 // applyRegionLock 连接 / 重载后调用：已锁定就重新应用；已解除但还有没恢复的组（断开时解除的）就恢复
 func (a *App) applyRegionLock(api *CoreAPI, mainGroup string) {
 	st := a.store.Settings()
-	_, regions := a.runtime()
-	var locked *Region
+	// v1.0.38 曾把锁定地区的自动组「钉住」在核实过出口的节点上，内核会把钉住记录带到以后的连接。
+	// 那个功能已去掉（查询服务的地区数据本身不可靠），这里取消所有地区组的钉住，恢复按延迟自动选
+	_, regs := a.runtime()
+	for _, r := range regs {
+		_ = api.Unfix(r.GroupName())
+	}
 	if st.LockedRegion == "" {
 		if len(st.RegionSaved) > 0 {
 			a.lockRelease(api, mainGroup, "")
 		}
-	} else {
-		for _, r := range regions {
-			if r.Code == st.LockedRegion {
-				_ = a.lockApply(api, mainGroup, r)
-				locked = r
-			}
+		return
+	}
+	_, regions := a.runtime()
+	for _, r := range regions {
+		if r.Code == st.LockedRegion {
+			_ = a.lockApply(api, mainGroup, r)
+			return
 		}
 	}
-	// 核实锁定地区节点的实际出口（后台进行，不挡住连接）
-	go verifyOnLockChanged(api, regions, locked)
 }
 
 // teardown 停内核、恢复系统代理、清空运行状态
 func (a *App) teardown(reason string) {
 	appendLog("[APP] 断开：" + reason)
-	verifyReset()
 	a.mu.Lock()
 	if a.maintCancel != nil {
 		a.maintCancel()
@@ -679,21 +680,6 @@ func (a *App) startMaintenance(api *CoreAPI, checkGeo bool) {
 				return true
 			}
 		}
-		// 锁定地区时每 30 秒核实一次当前节点的实际出口（见 regionverify.go）
-		go func() {
-			for sleep(30 * time.Second) {
-				st := a.store.Settings()
-				if st.LockedRegion == "" || st.Mode == "direct" {
-					continue
-				}
-				_, regions := a.runtime()
-				for _, r := range regions {
-					if r.Code == st.LockedRegion {
-						verifyEnsure(api, r, false)
-					}
-				}
-			}
-		}()
 		// 0. 节点可用性检查（连接 / 重载后 3 秒）
 		if !sleep(3 * time.Second) {
 			return
@@ -818,7 +804,6 @@ func (a *App) LockRegion(code string) error {
 		a.store.Update(func(s *Settings) { s.LockedRegion = "" })
 		if api != nil {
 			a.lockRelease(api, main, "")
-			go verifyUnpinAllExcept(api, regions, "") // 取消钉住，内核恢复按延迟自动选
 		}
 		// 未连接时保留记录，下次连接时再恢复
 		return nil
@@ -830,10 +815,7 @@ func (a *App) LockRegion(code string) error {
 	for _, r := range regions {
 		if r.Code == code {
 			err := a.lockApply(api, main, r)
-			go func() {
-				verifyOnLockChanged(api, regions, r) // 核实出口后再钉住节点，结果写进日志
-				a.CheckNodes()
-			}()
+			go a.CheckNodes()
 			return err
 		}
 	}
@@ -866,10 +848,6 @@ func (a *App) TestRegion(code string) (string, error) {
 		before = resolveLeaf(px, region.GroupName())
 	}
 	api.GroupDelay(region.GroupName())
-	// 锁定的就是这个地区时：按新测的延迟重新核实出口再切（节点要真的在这个地区）
-	if st := a.store.Settings(); st.LockedRegion == code && st.Mode != "direct" {
-		verifyEnsure(api, region, true)
-	}
 	// 内核对自动组的"最快"结果有几秒缓存，稍等再取最终选择
 	time.Sleep(1500 * time.Millisecond)
 	after := ""

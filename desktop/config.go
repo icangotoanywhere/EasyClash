@@ -283,15 +283,6 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 		}
 	}
 
-	// 锁定地区时核实节点实际出口用（见 regionverify.go）：一个包含全部节点的选择组 + 只给本机用的入口，出站固定为这个组。
-	// 加在上面「每个手动组末尾加地区选择」之后，所以这个组里没有「🌍 地区选择」，锁定地区时也不会被切走。
-	var verifyIn map[string]any
-	if len(created) > 0 && verifyListenPort > 0 && !existing[verifyGroup] {
-		groups = append(groups, map[string]any{"name": verifyGroup, "type": "select", "include-all": true})
-		verifyIn = map[string]any{"name": verifyListener, "type": "mixed", "port": verifyListenPort,
-			"listen": "127.0.0.1", "udp": false, "proxy": verifyGroup}
-	}
-
 	// ---------- 在线规则集 / 地理数据库的下载线路 ----------
 	// 订阅引用的在线规则集和地理数据库大多放在国外网站上，国内直连下不了；很多订阅的兜底组默认指向"直连"，
 	// 结果规则集全部下载失败、等于没有。这里固定让它们走代理：有地区选择组就用它，否则用主组。订阅自己写了 proxy 的不动。
@@ -413,9 +404,6 @@ func buildConfig(subYaml []byte, st Settings, runDir string, controller string, 
 	}
 	if st.MixedPort > 0 {
 		cfg["mixed-port"] = st.MixedPort
-	}
-	if verifyIn != nil {
-		cfg["listeners"] = []any{verifyIn}
 	}
 	cfg["allow-lan"] = false
 	cfg["bind-address"] = "127.0.0.1"
