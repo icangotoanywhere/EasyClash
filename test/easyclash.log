@@ -1,0 +1,136 @@
+2026-11-18 02:55:22 [APP] EasyClash 1.0.43 已启动，内核 mihomo v1.19.33
+2026-11-18 02:55:24 [APP] 接管方式=系统代理 端口=17890 主组=节点选择 地区组=3
+2026-11-18 02:55:24 [INFO] Start initial configuration in progress
+2026-11-18 02:55:24 [INFO] Geodata Loader mode: memconservative
+2026-11-18 02:55:24 [INFO] Geosite Matcher implementation: succinct
+2026-11-18 02:55:24 [INFO] Load GeoSite rule: cn
+2026-11-18 02:55:24 [INFO] Load GeoSite rule: private
+2026-11-18 02:55:24 [INFO] Finished initial GeoSite rule private => DIRECT, records: 133
+2026-11-18 02:55:24 [INFO] Finished initial GeoSite rule cn => DIRECT, records: 110177
+2026-11-18 02:55:24 [INFO] Initial configuration complete, total time: 122ms
+2026-11-18 02:55:24 [INFO] [EasyClash] 出境直连失败自动转代理：已开启，改走 🌍 地区选择
+2026-11-18 02:55:24 [INFO] [EasyClash] 国际 AI 服务强制走代理：23 个域名不允许直连
+2026-11-18 02:55:24 [INFO] Sniffer is closed
+2026-11-18 02:55:24 [INFO] Use tcp concurrent
+2026-11-18 02:55:24 [INFO] RESTful API listening at: 127.0.0.1:49196
+2026-11-18 02:55:24 [INFO] Mixed(http+socks) proxy listening at: 127.0.0.1:17890
+2026-11-18 02:55:24 [INFO] Start initial compatible provider 节点选择
+2026-11-18 02:55:24 [INFO] Start initial compatible provider 🇯🇵 日本·自动
+2026-11-18 02:55:24 [INFO] Start initial compatible provider default
+2026-11-18 02:55:24 [INFO] Start initial compatible provider 🇺🇸 美国·自动
+2026-11-18 02:55:24 [INFO] Start initial compatible provider 🇸🇬 新加坡·自动
+2026-11-18 02:55:24 [INFO] Start initial compatible provider 🌍 地区选择
+2026-11-18 02:55:24 [APP] 内核已就绪，版本 v1.19.33
+2026-11-18 02:55:24 [APP] 已把系统代理指向 127.0.0.1:17890
+2026-11-18 02:55:27 [APP] 节点检查：正常
+2026-11-18 02:55:28 [INFO] Load MMDB file: /Users/runner/Library/Application Support/EasyClash/home/geoip.metadb
+2026-11-18 02:55:28 [INFO] [TCP] 127.0.0.1:49238 --> www.example.com:443 match Match using 节点选择[🇸🇬 新加坡 01]
+2026-11-18 02:55:28 [INFO] [TCP] 127.0.0.1:49245 --> www.example.com:443 match Match using 节点选择[🇸🇬 新加坡 01]
+2026-11-18 02:55:28 [APP] 节点检查：正常
+2026-11-18 02:55:30 [INFO] [TCP] 127.0.0.1:49275 --> www.example.com:443 match Match using 节点选择[🇯🇵 日本 01]
+2026-11-18 02:55:30 [APP] 断开：用户断开
+2026-11-18 02:55:30 [APP] 已恢复原来的系统代理设置
+2026-11-18 02:55:30 [INFO] Start initial configuration in progress
+2026-11-18 02:55:30 [INFO] Geodata Loader mode: memconservative
+2026-11-18 02:55:30 [INFO] Geosite Matcher implementation: succinct
+2026-11-18 02:55:30 [INFO] Initial configuration complete, total time: 0ms
+2026-11-18 02:55:30 [ERROR] External controller serve error: http: Server closed
+2026-11-18 02:55:30 [WARNING] Mihomo shutting down
+2026-11-18 02:55:33 [APP] 接管方式=系统代理 端口=17890 主组=节点选择 地区组=3
+2026-11-18 02:55:33 [INFO] [EasyClash] 出境直连失败自动转代理：已开启，改走 🌍 地区选择
+2026-11-18 02:55:33 [INFO] [EasyClash] 国际 AI 服务强制走代理：23 个域名不允许直连
+2026-11-18 02:55:33 [INFO] Sniffer is closed
+2026-11-18 02:55:33 [INFO] Use tcp concurrent
+2026-11-18 02:55:33 [INFO] RESTful API listening at: 127.0.0.1:49288
+2026-11-18 02:55:33 [INFO] Mixed(http+socks) proxy listening at: 127.0.0.1:17890
+2026-11-18 02:55:33 [INFO] Start initial compatible provider 节点选择
+2026-11-18 02:55:33 [INFO] Start initial compatible provider 🇯🇵 日本·自动
+2026-11-18 02:55:33 [INFO] Start initial compatible provider default
+2026-11-18 02:55:33 [INFO] Start initial compatible provider 🇺🇸 美国·自动
+2026-11-18 02:55:33 [INFO] Start initial compatible provider 🇸🇬 新加坡·自动
+2026-11-18 02:55:33 [INFO] Start initial compatible provider 🌍 地区选择
+2026-11-18 02:55:33 [APP] 内核已就绪，版本 v1.19.33
+2026-11-18 02:55:33 [APP] 已把系统代理指向 127.0.0.1:17890
+2026-11-18 02:55:35 [APP] 上次没有正常退出，已恢复原来的系统代理设置
+2026-11-18 02:55:35 [APP] EasyClash 1.0.43 已启动，内核 mihomo v1.19.33
+2026-11-18 02:55:37 [TEST] open http://127.0.0.1:18765/
+2026-11-18 02:55:38 [APP] 接管方式=系统代理 端口=17890 主组=节点选择 地区组=3
+2026-11-18 02:55:38 [INFO] Start initial configuration in progress
+2026-11-18 02:55:38 [INFO] Geodata Loader mode: memconservative
+2026-11-18 02:55:38 [INFO] Geosite Matcher implementation: succinct
+2026-11-18 02:55:38 [INFO] Load GeoSite rule: cn
+2026-11-18 02:55:39 [INFO] Load GeoSite rule: private
+2026-11-18 02:55:39 [INFO] Finished initial GeoSite rule private => DIRECT, records: 133
+2026-11-18 02:55:39 [INFO] Finished initial GeoSite rule cn => DIRECT, records: 110177
+2026-11-18 02:55:39 [INFO] Initial configuration complete, total time: 112ms
+2026-11-18 02:55:39 [INFO] [EasyClash] 出境直连失败自动转代理：已开启，改走 🌍 地区选择
+2026-11-18 02:55:39 [INFO] [EasyClash] 国际 AI 服务强制走代理：23 个域名不允许直连
+2026-11-18 02:55:39 [INFO] Sniffer is closed
+2026-11-18 02:55:39 [INFO] Use tcp concurrent
+2026-11-18 02:55:39 [INFO] RESTful API listening at: 127.0.0.1:49333
+2026-11-18 02:55:39 [INFO] Mixed(http+socks) proxy listening at: 127.0.0.1:17890
+2026-11-18 02:55:39 [INFO] Start initial compatible provider default
+2026-11-18 02:55:39 [INFO] Start initial compatible provider 🇸🇬 新加坡·自动
+2026-11-18 02:55:39 [INFO] Start initial compatible provider 🌍 地区选择
+2026-11-18 02:55:39 [INFO] Start initial compatible provider 🇺🇸 美国·自动
+2026-11-18 02:55:39 [INFO] Start initial compatible provider 🇯🇵 日本·自动
+2026-11-18 02:55:39 [INFO] Start initial compatible provider 节点选择
+2026-11-18 02:55:39 [APP] 内核已就绪，版本 v1.19.33
+2026-11-18 02:55:39 [APP] 已把系统代理指向 127.0.0.1:17890
+2026-11-18 02:55:41 [APP] 断开：退出程序
+2026-11-18 02:55:41 [APP] 已恢复原来的系统代理设置
+2026-11-18 02:55:41 [INFO] Start initial configuration in progress
+2026-11-18 02:55:41 [INFO] Geodata Loader mode: memconservative
+2026-11-18 02:55:41 [INFO] Geosite Matcher implementation: succinct
+2026-11-18 02:55:41 [INFO] Initial configuration complete, total time: 0ms
+2026-11-18 02:55:41 [ERROR] External controller serve error: http: Server closed
+2026-11-18 02:55:41 [WARNING] Mihomo shutting down
+2026-11-18 02:55:41 [APP] EasyClash 1.0.43 已启动，内核 mihomo v1.19.33
+2026-11-18 02:55:41 [TEST] open http://127.0.0.1:49374/
+2026-11-18 02:55:46 [APP] 接管方式=系统代理 端口=17890 主组=节点选择 地区组=3
+2026-11-18 02:55:46 [INFO] Start initial configuration in progress
+2026-11-18 02:55:46 [INFO] Geodata Loader mode: memconservative
+2026-11-18 02:55:46 [INFO] Geosite Matcher implementation: succinct
+2026-11-18 02:55:46 [INFO] Load GeoSite rule: cn
+2026-11-18 02:55:46 [INFO] Load GeoSite rule: private
+2026-11-18 02:55:46 [INFO] Finished initial GeoSite rule private => DIRECT, records: 133
+2026-11-18 02:55:46 [INFO] Finished initial GeoSite rule cn => DIRECT, records: 110177
+2026-11-18 02:55:46 [INFO] Initial configuration complete, total time: 157ms
+2026-11-18 02:55:46 [INFO] [EasyClash] 出境直连失败自动转代理：已开启，改走 🌍 地区选择
+2026-11-18 02:55:46 [INFO] [EasyClash] 国际 AI 服务强制走代理：23 个域名不允许直连
+2026-11-18 02:55:46 [INFO] Sniffer is closed
+2026-11-18 02:55:46 [INFO] Use tcp concurrent
+2026-11-18 02:55:46 [INFO] RESTful API listening at: 127.0.0.1:49378
+2026-11-18 02:55:46 [INFO] Mixed(http+socks) proxy listening at: 127.0.0.1:17890
+2026-11-18 02:55:46 [INFO] Start initial compatible provider 🇺🇸 美国·自动
+2026-11-18 02:55:46 [INFO] Start initial compatible provider 🌍 地区选择
+2026-11-18 02:55:46 [INFO] Start initial compatible provider 🇯🇵 日本·自动
+2026-11-18 02:55:46 [INFO] Start initial compatible provider 🇸🇬 新加坡·自动
+2026-11-18 02:55:46 [INFO] Start initial compatible provider default
+2026-11-18 02:55:46 [INFO] Start initial compatible provider 节点选择
+2026-11-18 02:55:46 [APP] 内核已就绪，版本 v1.19.33
+2026-11-18 02:55:46 [APP] 已把系统代理指向 127.0.0.1:17890
+2026-11-18 02:55:48 [INFO] Load MMDB file: /Users/runner/Library/Application Support/EasyClash/home/geoip.metadb
+2026-11-18 02:55:48 [INFO] [TCP] 127.0.0.1:49419 --> itunes.apple.com:443 match Match using 节点选择[🇯🇵 日本 01]
+2026-11-18 02:55:49 [APP] 程序被再次打开，打开控制面板
+2026-11-18 02:55:49 [TEST] open http://127.0.0.1:49374/
+2026-11-18 02:55:49 [APP] 节点检查：正常
+2026-11-18 02:55:52 [APP] 收到一键导入链接
+2026-11-18 02:55:52 [TEST] open http://127.0.0.1:49374/
+2026-11-18 02:55:54 [APP] 地理数据库超过 7 天未检查，后台更新中…
+2026-11-18 02:55:54 [INFO] [GEO] Start updating GEO database
+2026-11-18 02:55:54 [INFO] [GEO] Updating GEO database
+2026-11-18 02:55:54 [INFO] [TCP] mihomo --> testingcf.jsdelivr.net:443 match Domain(testingcf.jsdelivr.net) using 🌍 地区选择[🇯🇵 日本 01]
+2026-11-18 02:55:54 [INFO] [TCP] mihomo --> testingcf.jsdelivr.net:443 match Domain(testingcf.jsdelivr.net) using 🌍 地区选择[🇯🇵 日本 01]
+2026-11-18 02:55:55 [APP] 断开：退出程序
+2026-11-18 02:55:56 [APP] 已恢复原来的系统代理设置
+2026-11-18 02:55:56 [INFO] Start initial configuration in progress
+2026-11-18 02:55:56 [INFO] Geodata Loader mode: memconservative
+2026-11-18 02:55:56 [INFO] Geosite Matcher implementation: succinct
+2026-11-18 02:55:56 [INFO] Initial configuration complete, total time: 0ms
+2026-11-18 02:55:56 [ERROR] External controller serve error: http: Server closed
+2026-11-18 02:55:56 [WARNING] Mihomo shutting down
+2026-11-18 02:55:57 [APP] EasyClash 1.0.43 已启动，内核 mihomo v1.19.33
+2026-11-18 02:55:57 [TEST] open http://127.0.0.1:49440/
+2026-11-18 02:55:57 [APP] 收到一键导入链接
+2026-11-18 02:55:57 [TEST] open http://127.0.0.1:49440/
