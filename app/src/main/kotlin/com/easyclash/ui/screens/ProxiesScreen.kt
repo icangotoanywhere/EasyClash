@@ -199,7 +199,8 @@ private fun DelayText(p: ProxyItem?) {
     if (p == null) return
     if (p.type.equals("Direct", true) || p.type.equals("Reject", true)) return
     val (text, color) = when {
-        p.delay <= 0 -> "未测" to MaterialTheme.colorScheme.onSurfaceVariant
+        !p.tested && p.delay <= 0 -> "未测" to MaterialTheme.colorScheme.onSurfaceVariant
+        p.delay <= 0 -> "超时" to MaterialTheme.colorScheme.error   // 测过但失败：内核记的延迟是 0
         p.delay < 200 -> "${p.delay}ms" to Color(0xFF2E7D32)
         p.delay < 500 -> "${p.delay}ms" to Color(0xFFF9A825)
         else -> "${p.delay}ms" to MaterialTheme.colorScheme.error

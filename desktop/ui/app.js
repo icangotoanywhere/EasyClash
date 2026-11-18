@@ -197,7 +197,7 @@ function parseProxies(raw) {
   const out = {};
   for (const [name, o] of Object.entries(raw.proxies || {})) {
     const hist = o.history || [];
-    out[name] = { name, type: o.type || '', now: o.now || '', all: o.all || [], delay: hist.length ? hist[hist.length - 1].delay : 0 };
+    out[name] = { name, type: o.type || '', now: o.now || '', all: o.all || [], delay: hist.length ? hist[hist.length - 1].delay : 0, tested: hist.length > 0 };
   }
   return out;
 }
@@ -548,7 +548,8 @@ function delayEl(p) {
   if (!p) return null;
   const t = (p.type || '').toLowerCase();
   if (t === 'direct' || t === 'reject' || t === 'rejectdrop' || t === 'pass') return null;
-  if (p.delay <= 0) return h('span', { class: 'delay n' }, '未测');
+  if (p.delay <= 0 && !p.tested) return h('span', { class: 'delay n' }, '未测');
+  if (p.delay <= 0) return h('span', { class: 'delay r' }, '超时');   // 测过但失败：内核记的延迟是 0
   return h('span', { class: 'delay ' + (p.delay < 200 ? 'g' : p.delay < 500 ? 'y' : 'r') }, p.delay + 'ms');
 }
 

@@ -170,8 +170,9 @@ data class ProxyItem(
     val type: String,
     val now: String?,          // 策略组当前选中项；普通节点为 null
     val all: List<String>,     // 策略组包含的条目
-    val delay: Int,            // 最近一次延迟（毫秒），0 表示未测或超时
+    val delay: Int,            // 最近一次延迟（毫秒），0 表示未测或超时（用 tested 区分）
     val alive: Boolean,
+    val tested: Boolean = false, // 内核里有没有测速记录：测过但失败时 delay 为 0，要显示「超时」而不是「未测」
 ) {
     val isGroup: Boolean get() = all.isNotEmpty()
     val isSelectable: Boolean get() = type.equals("Selector", true)

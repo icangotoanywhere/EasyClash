@@ -63,11 +63,12 @@ func (c *CoreAPI) Ping() bool {
 
 // ProxyItem 代理组里的一个条目（来自内核 /proxies 接口）
 type ProxyItem struct {
-	Name  string   `json:"name"`
-	Type  string   `json:"type"`
-	Now   string   `json:"now"`
-	All   []string `json:"all"`
-	Delay int      `json:"delay"`
+	Name   string   `json:"name"`
+	Type   string   `json:"type"`
+	Now    string   `json:"now"`
+	All    []string `json:"all"`
+	Delay  int      `json:"delay"`
+	Tested bool     `json:"tested"` // 内核里有测速记录；测过但失败时 Delay 为 0，界面显示「超时」
 }
 
 func (c *CoreAPI) Proxies() (map[string]ProxyItem, error) {
@@ -95,7 +96,7 @@ func (c *CoreAPI) Proxies() (map[string]ProxyItem, error) {
 		if n := len(v.History); n > 0 {
 			d = v.History[n-1].Delay
 		}
-		out[k] = ProxyItem{Name: k, Type: v.Type, Now: v.Now, All: v.All, Delay: d}
+		out[k] = ProxyItem{Name: k, Type: v.Type, Now: v.Now, All: v.All, Delay: d, Tested: len(v.History) > 0}
 	}
 	return out, nil
 }

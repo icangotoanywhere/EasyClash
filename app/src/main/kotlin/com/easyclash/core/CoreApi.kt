@@ -72,6 +72,7 @@ class CoreApi(private val port: Int, private val secret: String) {
             all = all,
             delay = delay,
             alive = o.optBoolean("alive", true),
+            tested = hist != null && hist.length() > 0,
         )
     }
 
